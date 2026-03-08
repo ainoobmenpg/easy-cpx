@@ -51,6 +51,7 @@ export default function GamePage() {
   const [showHelp, setShowHelp] = useState(true);
   const [turnLogs, setTurnLogs] = useState<TurnLog[]>([]);
   const [zoom, setZoom] = useState(1);
+  const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { fetchGameState(); }, [gameId]);
@@ -58,9 +59,15 @@ export default function GamePage() {
   const fetchGameState = async () => {
     try {
       const res = await fetch(`http://localhost:8000/api/game/${gameId}/state`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setGameState(data);
-    } catch (e) { console.error('Failed to fetch game state:', e); }
+      setError(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      console.error('Failed to fetch game state:', msg);
+      setError(msg);
+    }
   };
 
   const parseOrder = async () => {
@@ -194,7 +201,19 @@ export default function GamePage() {
     return gridToSvg(gridX, gridY);
   };
 
-  if (!gameState) return <div className="flex items-center justify-center h-screen bg-gray-900 text-white">Loading...</div>;
+  if (!gameState) return (
+    <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white">
+      {error ? (
+        <div className="bg-red-900/50 border border-red-500 text-red-200 p-4 rounded-lg">
+          <p className="font-bold">Error loading game</p>
+          <p className="text-sm">{error}</p>
+          <button onClick={fetchGameState} aria-label="再試行" className="mt-2 px-4 py-1 bg-red-600 hover:bg-red-500 rounded text-sm">Retry</button>
+        </div>
+      ) : (
+        <div>Loading...</div>
+      )}
+    </div>
+  );
 
   return (
     <div className="h-screen bg-gray-900 text-gray-100 flex flex-col overflow-hidden">
@@ -202,7 +221,7 @@ export default function GamePage() {
       <header className={`border-b border-gray-700/50 px-4 py-2 flex justify-between items-center shrink-0 backdrop-blur-sm ${gameState.is_night ? 'bg-slate-900/80' : 'bg-gray-800/80'}`}>
         <div className="flex items-center gap-4">
           <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">作戦級CPX</h1>
-          <button onClick={() => setShowHelp(!showHelp)} className="text-xs bg-gray-700/50 hover:bg-gray-600/50 px-3 py-1 rounded backdrop-blur transition-colors">{showHelp ? 'ガイド' : '表示'}</button>
+          <button onClick={() => setShowHelp(!showHelp)} aria-label="ヘルプ表示切替" className="text-xs bg-gray-700/50 hover:bg-gray-600/50 px-3 py-1 rounded backdrop-blur transition-colors">{showHelp ? 'ガイド' : '表示'}</button>
         </div>
         <div className="flex gap-6 text-sm items-center">
           <span className="text-gray-400 font-medium">{gameState.date}</span>
@@ -327,9 +346,9 @@ export default function GamePage() {
 
           {/* Map Controls (outside clipped area) - modern glass style */}
           <div className="absolute top-3 right-3 flex flex-col gap-1.5 z-10">
-            <button onClick={() => setZoom(z => Math.min(3, z + 0.2))} className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-lg font-bold transition-colors border border-gray-600/30">+</button>
-            <button onClick={() => setZoom(z => Math.max(0.5, z - 0.2))} className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-lg font-bold transition-colors border border-gray-600/30">−</button>
-            <button onClick={() => setZoom(1)} className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30">Reset</button>
+            <button onClick={() => setZoom(z => Math.min(3, z + 0.2))} aria-label="マップをzoom in" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-lg font-bold transition-colors border border-gray-600/30">+</button>
+            <button onClick={() => setZoom(z => Math.max(0.5, z - 0.2))} aria-label="マップをzoom out" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-lg font-bold transition-colors border border-gray-600/30">−</button>
+            <button onClick={() => setZoom(1)} aria-label="ズームをリセット" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30">Reset</button>
           </div>
 
           {/* Map Info - modern style */}
@@ -395,9 +414,9 @@ export default function GamePage() {
               <textarea value={orderInput} onChange={(e) => setOrderInput(e.target.value)}
                 placeholder="命令を入力..." className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg p-2 text-xs h-16 mb-2 focus:border-blue-500 focus:outline-none backdrop-blur" />
               <div className="flex gap-2">
-                <button onClick={parseOrder} disabled={loading || !orderInput.trim()} className="flex-1 bg-blue-600/80 hover:bg-blue-600 disabled:bg-gray-600/50 rounded-lg p-2 text-xs font-medium transition-colors">解析</button>
+                <button onClick={parseOrder} disabled={loading || !orderInput.trim()} aria-label="命令を解析" className="flex-1 bg-blue-600/80 hover:bg-blue-600 disabled:bg-gray-600/50 rounded-lg p-2 text-xs font-medium transition-colors">解析</button>
                 {parsedOrder && (
-                  <button onClick={submitOrder} disabled={loading} className="flex-1 bg-green-600/80 hover:bg-green-600 disabled:bg-gray-600/50 rounded-lg p-2 text-xs font-medium transition-colors">決定</button>
+                  <button onClick={submitOrder} disabled={loading} aria-label="命令を決定" className="flex-1 bg-green-600/80 hover:bg-green-600 disabled:bg-gray-600/50 rounded-lg p-2 text-xs font-medium transition-colors">決定</button>
                 )}
               </div>
               {parsedOrder && (
@@ -436,7 +455,7 @@ export default function GamePage() {
 
           {/* Advance Turn */}
           <div className="p-3 border-t border-gray-700/50 shrink-0 bg-gray-800/50">
-            <button onClick={advanceTurn} disabled={loading} className="w-full bg-purple-600/80 hover:bg-purple-600 disabled:bg-gray-600/50 rounded-lg p-3 text-sm font-bold transition-all shadow-lg shadow-purple-900/30">
+            <button onClick={advanceTurn} disabled={loading} aria-label="ターン進行" className="w-full bg-purple-600/80 hover:bg-purple-600 disabled:bg-gray-600/50 rounded-lg p-3 text-sm font-bold transition-all shadow-lg shadow-purple-900/30">
               ▶ ターン進行
             </button>
           </div>

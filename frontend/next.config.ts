@@ -1,8 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Disable Turbopack for Tailwind CSS compatibility
-  turbopack: false,
+  // Tailwind CSS v3 compatibility is handled via postcss.config.js
 };
 
 export default nextConfig;
