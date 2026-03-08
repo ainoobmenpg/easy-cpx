@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- NATO Reconnaissance: Diamond in rectangle -->
+  <rect x="5" y="25" width="90" height="50" fill="none" stroke="currentColor" stroke-width="6"/>
+  <polygon points="50,35 70,50 50,65 30,50" fill="currentColor"/>
+</svg>

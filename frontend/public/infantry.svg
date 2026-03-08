@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- NATO Infantry: X mark in rectangle -->
+  <rect x="5" y="25" width="90" height="50" fill="none" stroke="currentColor" stroke-width="6"/>
+  <line x1="25" y1="35" x2="75" y2="65" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
+  <line x1="75" y1="35" x2="25" y2="65" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
+</svg>

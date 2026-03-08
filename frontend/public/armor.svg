@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- NATO Armor/Tank: Double arrow in rectangle -->
+  <rect x="5" y="25" width="90" height="50" fill="none" stroke="currentColor" stroke-width="6"/>
+  <polygon points="35,50 55,35 55,45 80,45 80,55 55,55 55,65" fill="currentColor"/>
+  <polygon points="65,50 45,35 45,45 20,45 20,55 45,55 45,65" fill="currentColor"/>
+</svg>
