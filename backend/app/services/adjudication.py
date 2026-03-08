@@ -2,8 +2,165 @@
 from sqlalchemy.orm import Session
 from app.models import Unit, Turn, Order, Game, OrderType, UnitStatus, SupplyLevel
 from datetime import datetime
+from typing import Optional
 import random
 import math
+
+
+# Adjudication condition types
+class AdjudicationCondition:
+    """Represents a condition for structured adjudication"""
+
+    def __init__(self, name: str, weight: float, description: str):
+        self.name = name
+        self.weight = weight
+        self.description = description
+        self.met = False
+
+    def evaluate(self, context: dict) -> bool:
+        """Evaluate if condition is met given the context"""
+        raise NotImplementedError
+
+
+class AdjudicationCriteria:
+    """
+    Structured adjudication criteria based on 7 major conditions
+
+    The system evaluates orders against these conditions to determine:
+    - Success: Most conditions met
+    - Partial: Some conditions met
+    - Failed: Few conditions met
+    """
+
+    # Default conditions and their weights
+    CONDITIONS = {
+        "superior_firepower": {
+            "weight": 1.5,
+            "description": "味方が敵戦力を上回っている"
+        },
+        "position_advantage": {
+            "weight": 1.2,
+            "description": "有利な地形を占領している"
+        },
+        "mobility": {
+            "weight": 1.0,
+            "description": "機動力が確保されている"
+        },
+        "supply_status": {
+            "weight": 1.0,
+            "description": "補給体制が確保されている"
+        },
+        "reconnaissance": {
+            "weight": 0.8,
+            "description": "偵察が完了している"
+        },
+        "weather_advantage": {
+            "weight": 0.7,
+            "description": "天候が有利に作用している"
+        },
+        "surprise": {
+            "weight": 0.8,
+            "description": "奇襲要素がある"
+        }
+    }
+
+    @classmethod
+    def evaluate_order(
+        cls,
+        order: Order,
+        unit: Unit,
+        target_units: list[Unit],
+        game_state: dict,
+        weather: str = "clear",
+        time: str = "06:00"
+    ) -> tuple[str, dict]:
+        """
+        Evaluate an order using structured criteria
+
+        Returns:
+            (outcome, criteria_results)
+            outcome: "success" | "partial" | "failed"
+            criteria_results: dict of condition -> {met: bool, score: float}
+        """
+
+        # Calculate individual condition scores
+        results = {}
+
+        # 1. Superior firepower
+        unit_strength = unit.strength / 100.0
+        target_strength = sum(t.strength for t in target_units) / 100.0 / max(1, len(target_units))
+        results["superior_firepower"] = {
+            "met": unit_strength > target_strength * 1.2,
+            "score": unit_strength / max(0.1, target_strength),
+            "description": cls.CONDITIONS["superior_firepower"]["description"]
+        }
+
+        # 2. Position advantage (simplified - would need terrain system)
+        results["position_advantage"] = {
+            "met": True,  # Would check terrain in full implementation
+            "score": 1.0,
+            "description": cls.CONDITIONS["position_advantage"]["description"]
+        }
+
+        # 3. Mobility
+        can_move = unit.fuel != SupplyLevel.EXHAUSTED
+        results["mobility"] = {
+            "met": can_move,
+            "score": 1.0 if can_move else 0.0,
+            "description": cls.CONDITIONS["mobility"]["description"]
+        }
+
+        # 4. Supply status
+        has_supplies = unit.ammo != SupplyLevel.EXHAUSTED
+        results["supply_status"] = {
+            "met": has_supplies,
+            "score": 1.0 if has_supplies else 0.0,
+            "description": cls.CONDITIONS["supply_status"]["description"]
+        }
+
+        # 5. Reconnaissance (order type based)
+        has_recon = order.order_type in [OrderType.RECON, OrderType.MOVE]
+        results["reconnaissance"] = {
+            "met": has_recon,
+            "score": 1.0 if has_recon else 0.5,
+            "description": cls.CONDITIONS["reconnaissance"]["description"]
+        }
+
+        # 6. Weather advantage
+        is_weather_favorable = weather in ["clear", "cloudy"]
+        is_night = int(time.split(":")[0]) < 6 or int(time.split(":")[0]) >= 20
+        results["weather_advantage"] = {
+            "met": is_weather_favorable and not is_night,
+            "score": 1.0 if (is_weather_favorable and not is_night) else 0.5,
+            "description": cls.CONDITIONS["weather_advantage"]["description"]
+        }
+
+        # 7. Surprise (simplified - would need detection system)
+        results["surprise"] = {
+            "met": False,  # Would check in full implementation
+            "score": 0.3,
+            "description": cls.CONDITIONS["surprise"]["description"]
+        }
+
+        # Calculate weighted score
+        total_weight = sum(c["weight"] for c in cls.CONDITIONS.values())
+        weighted_score = sum(
+            results[cond]["score"] * cls.CONDITIONS[cond]["weight"]
+            for cond in results
+        ) / total_weight
+
+        # Determine outcome based on score
+        conditions_met = sum(1 for r in results.values() if r["met"])
+        total_conditions = len(results)
+
+        if weighted_score >= 0.7 and conditions_met >= 5:
+            outcome = "success"
+        elif weighted_score >= 0.4 and conditions_met >= 3:
+            outcome = "partial"
+        else:
+            outcome = "failed"
+
+        return outcome, results
 
 
 class RuleEngine:
@@ -87,14 +244,43 @@ class RuleEngine:
                 outcome = "success"
 
         elif order.order_type == OrderType.ATTACK:
-            # Simple combat resolution
-            outcome = self._resolve_combat(unit)
+            # Get target units from order
+            target_ids = order.target_units or []
+            target_units = []
+            for tid in target_ids:
+                target = self.db.query(Unit).filter(Unit.id == tid).first()
+                if target:
+                    target_units.append(target)
+
+            # Get game state for criteria evaluation
+            game = self.db.query(Game).filter(Game.id == order.game_id).first()
+            game_state = {
+                "turn": game.current_turn if game else 1,
+                "weather": game.weather if game else "clear"
+            }
+
+            # Use structured adjudication criteria
+            outcome, criteria_results = AdjudicationCriteria.evaluate_order(
+                order, unit, target_units, game_state,
+                weather=game.weather if game else "clear",
+                time=game.current_time if game else "06:00"
+            )
+
+            # Apply combat effects based on outcome
+            if outcome == "failed":
+                # Take damage when failed
+                if unit.status == UnitStatus.INTACT:
+                    unit.status = UnitStatus.LIGHT_DAMAGE
+                elif unit.status == UnitStatus.LIGHT_DAMAGE:
+                    unit.status = UnitStatus.MEDIUM_DAMAGE
+
             changes.append({
                 "type": "combat",
                 "target": unit.id,
                 "field": "status",
                 "old_value": unit.status,
-                "new_value": unit.status
+                "new_value": unit.status,
+                "criteria_results": criteria_results
             })
 
         elif order.order_type == OrderType.DEFEND:

@@ -66,6 +66,10 @@ class Unit(Base):
     readiness = Column(Enum(SupplyLevel), default=SupplyLevel.FULL)
     strength = Column(Integer, default=100)  # 0-100
 
+    # Extended resources (for advanced resource management)
+    interceptors = Column(Integer, default=0)  # Air defense missiles
+    precision_munitions = Column(Integer, default=0)  # Guided munitions
+
     game = relationship("Game", back_populates="units")
     order = relationship("Order", back_populates="unit", uselist=False)
 
@@ -148,3 +152,33 @@ class PlayerKnowledge(Base):
     # Player's interpretation
     interpreted_type = Column(String)
     interpreted_side = Column(String)
+
+
+# Commander Order - High-level command intent
+class CommanderOrder(Base):
+    __tablename__ = "commander_orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    game_id = Column(Integer, ForeignKey("games.id"))
+    turn_issued = Column(Integer, nullable=False)
+
+    # Command hierarchy
+    intent = Column(Text)  # Strategic intent
+    mission = Column(Text)  # Specific mission
+    constraints = Column(Text)  # Operational constraints
+    roe = Column(Text)  # Rules of Engagement
+    priorities = Column(JSON)  # Priority list
+    time_limit = Column(String)  # Time constraint
+
+    # Available forces
+    available_forces = Column(JSON)  # List of available units
+
+    # Reporting requirements
+    reporting_requirements = Column(JSON)  # Events that must be reported
+    last_reported = Column(JSON)  # What was last reported
+
+    # Status
+    status = Column(String, default="active")  # active, superseded, completed
+    superseded_by = Column(Integer, ForeignKey("commander_orders.id"), nullable=True)
+
+    game = relationship("Game")
