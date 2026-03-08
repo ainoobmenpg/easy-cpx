@@ -227,9 +227,9 @@ export default function GamePage() {
       )}
 
       {/* Main: 3 columns */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-nowrap overflow-hidden">
         {/* Left: Units - expanded to 240px */}
-        <div className="w-60 bg-gray-800/90 border-r border-gray-700/50 p-3 flex flex-col shrink-0 overflow-y-auto backdrop-blur-sm">
+        <div className="bg-gray-800/90 border-r border-gray-700/50 p-3 flex flex-col shrink-0 overflow-y-auto backdrop-blur-sm" style={{ width: '320px', minWidth: '320px', maxWidth: '320px' }}>
           <h3 className="font-bold text-sm mb-3 text-blue-300 border-b border-gray-700/50 pb-2">■ ユニット</h3>
           <div className="space-y-2">
             {gameState.units.map((unit) => (
@@ -341,7 +341,7 @@ export default function GamePage() {
         </div>
 
         {/* Right: Orders + Logs - expanded to 320px */}
-        <div className="w-80 bg-gray-800/90 border-l border-gray-700/50 flex flex-col shrink-0 overflow-hidden backdrop-blur-sm">
+        <div className="bg-gray-800/90 border-l border-gray-700/50 flex flex-col shrink-0 overflow-hidden backdrop-blur-sm" style={{ width: '400px', minWidth: '400px', maxWidth: '400px' }}>
           {/* Tab system */}
           <div className="flex border-b border-gray-700/50 shrink-0">
             <button className="flex-1 p-2 text-xs font-bold text-blue-300 border-b-2 border-blue-500 bg-blue-900/20">情報</button>

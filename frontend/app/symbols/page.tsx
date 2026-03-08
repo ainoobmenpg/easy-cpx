@@ -182,7 +182,7 @@ const natoSymbols: SymbolInfo[] = [
 
 export default function SymbolsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedSide, setSelectedSide] = useState<'friend' | 'enemy'>('friend');
+  const [selectedSide, setSelectedSide] = useState<'friend' | 'enemy' | 'neutral' | 'unknown'>('friend');
 
   const categories = ['all', ...new Set(natoSymbols.map(s => s.category))];
 
