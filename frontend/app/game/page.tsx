@@ -13,14 +13,20 @@ interface Unit {
   ammo: string;
   fuel: string;
   readiness: string;
+  strength: number;
 }
 
 interface GameState {
   game_id: number;
   turn: number;
   time: string;
+  date: string;
   weather: string;
   phase: string;
+  is_night: boolean;
+  terrain: Record<string, string>;
+  terrain_info: Record<string, { symbol: string; color: string; name: string }>;
+  weather_effects: Record<string, any>;
   units: Unit[];
 }
 
@@ -146,15 +152,23 @@ export default function GamePage() {
   return (
     <div className="h-screen bg-gray-900 text-gray-100 flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 p-2 flex justify-between items-center shrink-0">
+      <header className={`border-b border-gray-700 p-2 flex justify-between items-center shrink-0 ${gameState.is_night ? 'bg-slate-900' : 'bg-gray-800'}`}>
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-bold text-blue-400">作戦級CPX</h1>
           <button onClick={() => setShowHelp(!showHelp)} className="text-xs bg-gray-700 px-2 py-1 rounded">{showHelp ? 'ガイド' : '表示'}</button>
         </div>
-        <div className="flex gap-4 text-sm">
+        <div className="flex gap-4 text-sm items-center">
+          <span className="text-gray-400">{gameState.date}</span>
           <span className="text-blue-300">T{gameState.turn}</span>
-          <span className="text-yellow-300">{gameState.time}</span>
+          <span className={`font-bold ${gameState.is_night ? 'text-indigo-400' : 'text-yellow-300'}`}>
+            {gameState.is_night ? '🌙' : '☀️'} {gameState.time}
+          </span>
           <span className="text-green-300">{gameState.weather}</span>
+          {gameState.weather_effects && (
+            <span className="text-xs text-gray-500" title={`偵察:${Math.round(gameState.weather_effects.reconnaissance_modifier * 100)}% 機動力:${Math.round(gameState.weather_effects.movement_modifier * 100)}%`}>
+              [偵察{Math.round(gameState.weather_effects.reconnaissance_modifier * 100)}%]
+            </span>
+          )}
         </div>
       </header>
 
@@ -195,7 +209,7 @@ export default function GamePage() {
               viewBox="0 0 50 50"
               className="w-full h-full"
               style={{
-                background: '#1e293b',
+                background: gameState.is_night ? '#0f172a' : '#1e293b',
                 transform: `scale(${zoom})`,
                 transformOrigin: 'center center',
                 transition: 'transform 0.1s ease-out'
@@ -209,6 +223,18 @@ export default function GamePage() {
                   <line x1="0" y1={i * 5} x2="50" y2={i * 5} stroke="#334155" strokeWidth="0.1" />
                 </g>
               ))}
+              {/* Terrain */}
+              {gameState.terrain && Object.entries(gameState.terrain).map(([key, terrainType]) => {
+                const [x, y] = key.split(',').map(Number);
+                const info = gameState.terrain_info?.[terrainType];
+                if (!info || terrainType === 'plain') return null;
+                return (
+                  <g key={`terrain-${key}`}>
+                    <rect x={x - 0.45} y={y - 0.45} width="0.9" height="0.9" fill={info.color} opacity="0.4" />
+                    <text x={x} y={y + 0.3} fontSize="0.8" fill="#fff" textAnchor="middle" opacity="0.7">{info.symbol}</text>
+                  </g>
+                );
+              })}
               {/* Units */}
               {gameState.units.map((unit) => (
                 <g key={unit.id} onClick={() => setSelectedUnit(unit)} style={{ cursor: 'pointer' }}>
@@ -244,6 +270,35 @@ export default function GamePage() {
                 <span className="text-[10px] px-1 rounded" style={{ backgroundColor: getStatusColor(selectedUnit.status) + '40', color: getStatusColor(selectedUnit.status) }}>
                   {getStatusLabel(selectedUnit.status)}
                 </span>
+              </div>
+              {/* Unit Status Details */}
+              <div className="mb-2 bg-gray-700/50 rounded p-1 text-[10px] space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">戦力:</span>
+                  <span className={selectedUnit.strength < 50 ? 'text-red-400' : 'text-green-400'}>{selectedUnit.strength}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">弾薬:</span>
+                  <span className={selectedUnit.ammo === 'exhausted' ? 'text-red-400' : selectedUnit.ammo === 'depleted' ? 'text-yellow-400' : 'text-green-400'}>
+                    {selectedUnit.ammo === 'full' ? '充足' : selectedUnit.ammo === 'depleted' ? '低下' : '枯渇'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">燃料:</span>
+                  <span className={selectedUnit.fuel === 'exhausted' ? 'text-red-400' : selectedUnit.fuel === 'depleted' ? 'text-yellow-400' : 'text-green-400'}>
+                    {selectedUnit.fuel === 'full' ? '充足' : selectedUnit.fuel === 'depleted' ? '低下' : '枯渇'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">整備:</span>
+                  <span className={selectedUnit.readiness === 'exhausted' ? 'text-red-400' : selectedUnit.readiness === 'depleted' ? 'text-yellow-400' : 'text-green-400'}>
+                    {selectedUnit.readiness === 'full' ? '充足' : selectedUnit.readiness === 'depleted' ? '低下' : '枯渇'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">位置:</span>
+                  <span className="text-gray-300">X:{selectedUnit.x.toFixed(1)} Y:{selectedUnit.y.toFixed(1)}</span>
+                </div>
               </div>
               <textarea value={orderInput} onChange={(e) => setOrderInput(e.target.value)}
                 placeholder="命令を入力..." className="w-full bg-gray-700 border border-gray-600 rounded p-1 text-xs h-12 mb-1 focus:border-blue-500 focus:outline-none" />

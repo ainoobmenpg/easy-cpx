@@ -398,13 +398,36 @@ class RuleEngine:
 
         units = self.db.query(Unit).filter(Unit.game_id == game_id).all()
 
+        # Import terrain and weather services
+        from app.services.terrain import generate_map_terrain, get_terrain_display_info
+        from app.services.weather_effects import WeatherEffects
+
+        # Generate terrain data
+        terrain_map = generate_map_terrain(50, 50)
+        terrain_info = get_terrain_display_info()
+
+        # Get weather effects
+        weather_service = WeatherEffects()
+        weather_service.set_weather(game.weather or "clear")
+        weather_service.set_time(game.current_time or "12:00")
+        weather_data = weather_service.get_current_effects_summary()
+
+        # Determine if it's night
+        hour = int((game.current_time or "12:00").split(":")[0])
+        is_night = hour < 6 or hour >= 18
+
         return {
             "game_id": game.id,
             "name": game.name,
             "turn": game.current_turn,
             "time": game.current_time,
+            "date": getattr(game, 'current_date', '1985-11-22'),
             "weather": game.weather,
             "phase": game.phase,
+            "is_night": is_night,
+            "terrain": terrain_map,
+            "terrain_info": terrain_info,
+            "weather_effects": weather_data,
             "units": [
                 {
                     "id": u.id,

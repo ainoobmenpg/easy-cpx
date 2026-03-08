@@ -279,3 +279,85 @@ _terrain_effects = TerrainEffects()
 def get_terrain_effects() -> TerrainEffects:
     """Get the global terrain effects system"""
     return _terrain_effects
+
+
+def generate_map_terrain(width: int = 50, height: int = 50, seed: int = 42) -> dict:
+    """Generate terrain for the entire map"""
+    import random
+    random.seed(seed)
+
+    terrain_map = {}
+
+    # Generate terrain based on some natural distribution
+    for y in range(height):
+        for x in range(width):
+            # Base terrain is plain
+            terrain = TerrainType.PLAIN
+
+            # Add some variation based on position
+            # Create a river from top to bottom (右から左へ)
+            if 20 <= x <= 25 and y > 5:
+                terrain = TerrainType.WATER
+            elif 18 <= x <= 27 and y > 5:
+                # River banks
+                if random.random() < 0.3:
+                    terrain = TerrainType.SWAMP
+
+            # Create forest patches
+            elif random.random() < 0.15:
+                terrain = TerrainType.FOREST
+
+            # Create some urban areas
+            elif random.random() < 0.05:
+                terrain = TerrainType.URBAN
+
+            # High ground in certain areas
+            elif x > 35 and random.random() < 0.2:
+                terrain = TerrainType.HIGH_GROUND
+
+            # Mountain in far corner
+            elif x > 40 and y < 15 and random.random() < 0.3:
+                terrain = TerrainType.MOUNTAIN
+
+            terrain_map[f"{x},{y}"] = terrain.value
+
+    return terrain_map
+
+
+def get_terrain_display_info() -> dict:
+    """Get terrain display information for UI"""
+    return {
+        terrain.value: {
+            "symbol": {
+                "plain": "・",
+                "urban": "■",
+                "high_ground": "▲",
+                "forest": "▓",
+                "water": "≈",
+                "mountain": "△",
+                "desert": "□",
+                "swamp": "◇",
+            }.get(terrain.value, "?"),
+            "color": {
+                "plain": "#4a5568",
+                "urban": "#718096",
+                "high_ground": "#68d391",
+                "forest": "#2f855a",
+                "water": "#3182ce",
+                "mountain": "#9ae6b4",
+                "desert": "#d69e2e",
+                "swamp": "#4a5568",
+            }.get(terrain.value, "#666"),
+            "name": {
+                "plain": "平坦地",
+                "urban": "市街地",
+                "high_ground": "高地",
+                "forest": "森林",
+                "water": "水域",
+                "mountain": "山岳",
+                "desert": "砂漠",
+                "swamp": "湿地",
+            }.get(terrain.value, terrain.value),
+        }
+        for terrain in TerrainType
+    }

@@ -33,6 +33,12 @@ class OrderType(enum.Enum):
     SPECIAL = "special"
 
 
+class OrderLevel(enum.Enum):
+    TACTICAL = "tactical"  # Tactical: recon, defensive positions, urban combat, special ops
+    OPERATIONAL = "operational"  # Operational: division movement, air ops, missile, EW, air defense
+    STRATEGIC = "strategic"  # Strategic: mobilization, war start, deterrence, info warfare
+
+
 class Game(Base):
     __tablename__ = "games"
 
@@ -40,6 +46,7 @@ class Game(Base):
     name = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     current_turn = Column(Integer, default=1)
+    current_date = Column(String, default="1985-11-22")  # Historical Cold War scenario date
     current_time = Column(String, default="06:00")
     weather = Column(String, default="clear")
     phase = Column(String, default="orders")  # orders, adjudication, sitrep
@@ -102,6 +109,7 @@ class Order(Base):
     turn_id = Column(Integer, ForeignKey("turns.id"))
 
     order_type = Column(Enum(OrderType), nullable=False)
+    order_level = Column(Enum(OrderLevel), default=OrderLevel.TACTICAL)
     target_units = Column(JSON)  # List of unit IDs
     intent = Column(Text, nullable=False)
     location_x = Column(Float)

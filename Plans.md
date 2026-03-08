@@ -14,63 +14,62 @@
 
 ### 優先度1：今すぐ実装
 
-- [ ] テキストマップ生成システム `cc:TODO`
-  - グリッドベースのテキストマップ生成（記号: █▲▓≈-[F][?][E]★）
-  - 地形、市街地、高地、森林、水域の表示
-  - 友軍・敵軍・未確認の記号表示
-  - ファイル: `app/services/map_renderer.py`
+- [x] 地図への地形表示 `cc:完了` (2026-03-08)
+  - グリッドベースの地形データ生成（森林、山岳、市街地、水域）
+  - SVGマップに地形レンダリング
+  - 地形記号表示: ■(市街地)、▓(森林)、▲(高地)、△(山岳)、≈(水域)、◇(湿地)
+  - ファイル: `frontend/app/game/page.tsx` + `backend/app/services/terrain.py`
 
-- [ ] 敵の能動的AI (ExCon) `cc:TODO`
-  - 敵独自の作戦意図生成
-  - 逆襲、側面浸透、偵察強化、欺瞞、火力集中、後退、予備投入、陽動の実装
-  - ファイル: `app/services/excon_ai.py`
+- [x] 地図への気象情報表示 `cc:完了` (2026-03-08)
+  - ヘッダーに日付表示 (1985-11-22)
+  - 時間帯アイコン (☀️/🌙)
+  - 偵察倍率表示
+  - 夜間背景色変化
+  - ファイル: `frontend/app/game/page.tsx` + `backend/app/services/weather_effects.py`
 
-- [ ] 消耗資源管理 `cc:TODO`
-  - 弾薬、燃料、整備余力、迎撃弾、精密誘導兵器の別管理
-  - 3段階: 充足 / 低下 / 枯渇
-  - ファイル: `app/models/game_state.py` + `app/services/adjudication.py`
+### 優先度2：ドキュメント整備
 
-### 優先度2：次に実装
+- [x] README.md 更新 `cc:完了` (2026-03-08)
+  - プロジェクト概要
+  - セットアップ手順
+  - 技術スタック
+  - ファイル構成
 
-- [ ] 上官命令システム `cc:TODO`
-  - Intent, Mission, Constraints, ROE, Priorities, Time limit, Available forces, Reporting requirement
-  - ファイル: `app/models/command.py`
+- [x] docs/game-rules.md 作成 `cc:完了` (2026-03-08)
+  - ゲームルール詳細
+  - ターン進行
+  - 判定基準
+  - 資源管理
 
-- [ ] 詳細なSITREPフォーマット `cc:TODO`
-  - 【日時】【テキストマップ】【状況】【味方戦力】【敵情報】【重要イベント】【上官命令】
-  - 確認済み/推定/不明の区別
-  - ファイル: `app/services/sitrep_generator.py`
+- [x] docs/architecture.md 作成 `cc:完了` (2026-03-08)
+  - システムアーキテクチャ
+  - コンポーネント構成
+  - データフロー
 
-- [ ] 判定基準の構造化 `cc:TODO`
-  - 7つの主要条件での判定ロジック
-  - 成功/部分成功/失敗の条件分析
-  - ファイル: `app/services/adjudication.py` 更新
+### 優先度3：UI改善
 
-- [ ] 報告義務システム `cc:TODO`
-  - Reporting requirement に基づく報告追跡
-  - 報告がない場合の問い詰めイベント
-  - ファイル: `app/services/reporting.py`
+- [x] 日付表示追加 `cc:完了` (2026-03-08)
+  - ヘッダーに日付表示（YYYY-MM-DD）
+  - ファイル: `frontend/app/game/page.tsx`
 
-### 優先度3：余裕があれば実装
-
-- [ ] 夜間・天候効果 `cc:TODO`
-  - 夜間: NOD装置の有無が判定に影響
-  - 降雨/霧/砂塵: 偵察精度、航空運用、砲兵観測に影響
-  - ファイル: `app/services/weather_effects.py`
-
-- [ ] 地形効果 `cc:TODO`
-  - 森林、山岳、水域による戦力補正
-  - 視界/遮蔽判定
-  - ファイル: `app/services/terrain.py`
-
-- [ ] 膠着状態ルール `cc:TODO`
-  - 2ターン以上実質的行動がない場合の対応
-  - 敵の積極行動/上官压力/外部イベント発生
-  - ファイル: `app/services/stalemate.py`
+- [x] ユニット詳細パネルの充実 `cc:完了` (2026-03-08)
+  - 戦力、弾薬・燃料・整備状況の表示
+  - 位置座標の表示
 
 ---
 
 ## 🟢 完了タスク
+
+- [x] 優先度4実装 `cc:完了` (2026-03-08)
+  - 命令レベルシステム: OrderLevel enum追加
+  - 摩擦イベント: app/services/friction_events.py
+  - 偵察・情報精度: app/services/intelligence.py
+  - エスカレーション: app/services/escalation.py
+
+- [x] 優先度5実装 `cc:完了` (2026-03-08)
+  - 装備データベース: app/data/weapons.py（冷戦期装備）
+  - 初期配置: app/services/initial_setup.py
+  - 日付・時刻管理: Gameモデル更新
 
 - [x] テスト実装 `cc:完了` (2026-03-08)
   - Backend: pytest + conftest.py セットアップ
@@ -108,6 +107,36 @@
   - 地図表示コンポーネント (SVG マップ)
   - SITREP 表示
   - 命令入力UI
+
+- [x] テキストマップ生成 `cc:完了` (2026-03-08)
+  - app/services/map_renderer.py 実装完了
+
+- [x] 敵の能動的AI `cc:完了` (2026-03-08)
+  - app/services/excon_ai.py 実装完了
+
+- [x] 消耗資源管理 `cc:完了` (2026-03-08)
+  - app/services/resource_manager.py 実装完了
+
+- [x] 上官命令システム `cc:完了` (2026-03-08)
+  - app/services/commander_order_service.py 実装完了
+
+- [x] 詳細なSITREPフォーマット `cc:完了` (2026-03-08)
+  - app/services/sitrep_generator.py 実装完了
+
+- [x] 判定基準の構造化 `cc:完了` (2026-03-08)
+  - app/services/adjudication.py 更新完了
+
+- [x] 報告義務システム `cc:完了` (2026-03-08)
+  - app/services/reporting.py 実装完了
+
+- [x] 夜間・天候効果 `cc:完了` (2026-03-08)
+  - app/services/weather_effects.py 実装完了
+
+- [x] 地形効果 `cc:完了` (2026-03-08)
+  - app/services/terrain.py 実装完了
+
+- [x] 膠着状態ルール `cc:完了` (2026-03-08)
+  - app/services/stalemate.py 実装完了
 
 ---
 
