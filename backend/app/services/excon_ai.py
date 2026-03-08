@@ -1,8 +1,15 @@
 # ExCon (Enemy Commander) AI for Operational CPX
 # Provides proactive enemy AI with tactical decision-making
+import logging
 from typing import Optional
 from enum import Enum
 import random
+
+# Import unit profiles for behavior and compatibility
+from app.data.unit_profiles import get_unit_profile, get_compatibility_bonus
+
+# Configure logger for enemy AI
+ai_logger = logging.getLogger("cpx.ai")
 
 
 class EnemyTactic(Enum):
@@ -69,6 +76,8 @@ class ExConAI:
         else:
             self._tactical_situation = "normal"
 
+        ai_logger.debug(f"[AI] Situation: player_strength={player_strength}, enemy_strength={enemy_strength}, situation={self._tactical_situation}")
+
         # Adjust aggression based on situation
         if self._tactical_situation == "critical":
             self._aggression_level = max(0.2, self._aggression_level - 0.1)
@@ -76,6 +85,8 @@ class ExConAI:
             self._aggression_level = max(0.3, self._aggression_level - 0.05)
         else:
             self._aggression_level = min(0.9, self._aggression_level + 0.05)
+
+        ai_logger.debug(f"[AI] Aggression level: {self._aggression_level:.2f}, intent_duration: {self._intent_duration}")
 
         # Update intent every 2-3 turns
         self._intent_duration -= 1
@@ -111,6 +122,8 @@ class ExConAI:
         self._current_intent = self._random.choices(intent_list, weights=weight_list)[0]
         self._intent_duration = self._random.randint(2, 4)
 
+        ai_logger.debug(f"[AI] New intent selected: {self._current_intent.value} for {self._intent_duration} turns")
+
     def generate_orders(self, game_state: dict) -> list[dict]:
         """
         Generate enemy unit orders based on current intent and situation
@@ -126,6 +139,9 @@ class ExConAI:
         if not enemy_units:
             return []
 
+        ai_logger.debug(f"[AI] Enemy intent: {self._current_intent.value} (aggression: {self._aggression_level:.1f})")
+        ai_logger.debug(f"[AI] Processing {len(enemy_units)} enemy units vs {len(player_units)} player units")
+
         orders = []
 
         # Determine primary tactic for each enemy unit
@@ -133,7 +149,9 @@ class ExConAI:
             order = self._generate_unit_order(unit, player_units, game_state)
             if order:
                 orders.append(order)
+                ai_logger.debug(f"[AI] {unit.get('name', 'Unknown')} ({unit.get('type', 'unknown')}): {order.get('order_type', 'none')} -> {order.get('target', 'none')}")
 
+        ai_logger.debug(f"[AI] Generated {len(orders)} orders total")
         return orders
 
     def _generate_unit_order(
@@ -142,11 +160,16 @@ class ExConAI:
         player_units: list[dict],
         game_state: dict
     ) -> Optional[dict]:
-        """Generate an order for a single enemy unit"""
+        """Generate an order for a single enemy unit using behavior profiles"""
 
         unit_type = enemy_unit.get("type", "")
+        unit_name = enemy_unit.get("name", "Unknown")
         unit_x = enemy_unit.get("x", 0)
         unit_y = enemy_unit.get("y", 0)
+
+        # Get unit behavior profile
+        profile = get_unit_profile(unit_type)
+        ai_logger.debug(f"[AI] {unit_name}: profile={unit_type}, pos=({unit_x:.1f},{unit_y:.1f})")
 
         # Find nearest player unit
         nearest_player = None
@@ -157,17 +180,32 @@ class ExConAI:
                 min_dist = dist
                 nearest_player = p_unit
 
-        # Select tactic based on unit type and intent
-        if "artillery" in unit_type.lower():
-            return self._artillery_tactic(enemy_unit, player_units, min_dist)
-        elif "recon" in unit_type.lower():
+        ai_logger.debug(f"[AI] {unit_name}: nearest_player={nearest_player.get('name', 'None') if nearest_player else 'None'}, dist={min_dist:.1f}")
+
+        # Use behavior profile to determine action
+        # Recon-only units (UAV) should always use recon tactic
+        if profile.recon_only:
+            ai_logger.debug(f"[AI] {unit_name}: using RECON tactic (recon_only)")
             return self._recon_tactic(enemy_unit, player_units)
-        elif "air" in unit_type.lower():
-            return self._air_tactic(enemy_unit, player_units)
-        elif "supply" in unit_type.lower():
-            return self._supply_tactic(enemy_unit, game_state)
-        else:
-            return self._ground_tactic(enemy_unit, player_units, min_dist)
+
+        # Artillery should use artillery tactic
+        if profile.stay_rear:
+            ai_logger.debug(f"[AI] {unit_name}: using ARTILLERY tactic (stay_rear)")
+            return self._artillery_tactic(enemy_unit, player_units, min_dist)
+
+        # Air defense should prioritize staying at range
+        if profile.target_air:
+            ai_logger.debug(f"[AI] {unit_name}: using AIR_DEFENSE tactic (target_air)")
+            return self._air_defense_tactic(enemy_unit, player_units, min_dist)
+
+        # Units that avoid combat (transport helicopters, support)
+        if profile.avoid_combat:
+            ai_logger.debug(f"[AI] {unit_name}: using AVOIDANCE tactic (avoid_combat)")
+            return self._avoidance_tactic(enemy_unit, player_units, min_dist)
+
+        # Default: ground units
+        ai_logger.debug(f"[AI] {unit_name}: using GROUND tactic")
+        return self._ground_tactic(enemy_unit, player_units, min_dist)
 
     def _ground_tactic(
         self,
@@ -331,6 +369,83 @@ class ExConAI:
             "order_type": "move",
             "target": {"x": avg_x, "y": avg_y},
             "params": {"tactic": "maintain_supply"}
+        }
+
+    def _air_defense_tactic(self, unit: dict, player_units: list[dict], distance: float) -> dict:
+        """Generate tactics for air defense units - maintain distance from air threats"""
+        # Get behavior profile
+        profile = get_unit_profile(unit.get("type", ""))
+
+        # Check for air threats (aircraft, helicopters)
+        air_threats = [p for p in player_units if "air" in p.get("type", "").lower() or "helo" in p.get("type", "").lower()]
+
+        if air_threats:
+            # Engage air threats
+            nearest_air = min(air_threats, key=lambda p: self._distance(unit.get("x", 0), unit.get("y", 0), p.get("x", 0), p.get("y", 0)))
+            return {
+                "unit_id": unit.get("id"),
+                "order_type": "defend",
+                "target": {"x": unit.get("x"), "y": unit.get("y")},
+                "params": {"intent": "engage_air", "target": nearest_air.get("name")}
+            }
+
+        # No air threats - maintain defensive position
+        if distance < profile.min_range:
+            # Too close - move away
+            return {
+                "unit_id": unit.get("id"),
+                "order_type": "move",
+                "target": self._get_retreat_position(unit),
+                "params": {"tactic": "maintain_range"}
+            }
+        elif distance > profile.preferred_range:
+            # Too far - move closer
+            return {
+                "unit_id": unit.get("id"),
+                "order_type": "move",
+                "target": self._get_advance_position(unit, player_units),
+                "params": {"tactic": "maintain_range"}
+            }
+        else:
+            # In sweet spot - hold position
+            return {
+                "unit_id": unit.get("id"),
+                "order_type": "defend",
+                "target": {"x": unit.get("x"), "y": unit.get("y")},
+                "params": {"intent": "defend_position"}
+            }
+
+    def _avoidance_tactic(self, unit: dict, player_units: list[dict], distance: float) -> dict:
+        """Generate tactics for units that avoid combat (transport, support)"""
+        # Get behavior profile
+        profile = get_unit_profile(unit.get("type", ""))
+
+        # If too close to enemy, retreat
+        if distance < profile.preferred_range:
+            return {
+                "unit_id": unit.get("id"),
+                "order_type": "move",
+                "target": self._get_retreat_position(unit),
+                "params": {"tactic": "avoid_combat"}
+            }
+
+        # Stay at safe distance or move toward friendly units
+        enemy_units = [u for u in player_units]  # Actually this should be friendly units
+        if enemy_units:
+            avg_x = sum(u.get("x", 0) for u in enemy_units) / len(enemy_units)
+            avg_y = sum(u.get("y", 0) for u in enemy_units) / len(enemy_units)
+            return {
+                "unit_id": unit.get("id"),
+                "order_type": "move",
+                "target": {"x": avg_x, "y": avg_y},
+                "params": {"tactic": "rejoin_unit"}
+            }
+
+        return {
+            "unit_id": unit.get("id"),
+            "order_type": "defend",
+            "target": {"x": unit.get("x"), "y": unit.get("y")},
+            "params": {"intent": "hold_position"}
         }
 
     # Helper methods
