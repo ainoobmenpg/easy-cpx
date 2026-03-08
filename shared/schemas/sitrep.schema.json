@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Sitrep",
+  "description": "Situation Report schema",
+  "type": "object",
+  "required": ["turn", "timestamp", "sections"],
+  "properties": {
+    "turn": {
+      "type": "integer",
+      "description": "Current turn number"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Report generation timestamp"
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "content", "confidence"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["overview", "unit_status", "enemy_activity", "logistics", "orders_result", "friction", "command"]
+          },
+          "content": {"type": "string"},
+          "confidence": {
+            "type": "string",
+            "enum": ["confirmed", "estimated", "unknown"]
+          }
+        }
+      }
+    },
+    "map_updates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "x": {"type": "integer"},
+          "y": {"type": "integer"},
+          "type": {"type": "string"},
+          "visibility": {"type": "string", "enum": ["confirmed", "estimated", "unknown"]}
+        }
+      }
+    }
+  }
+}
