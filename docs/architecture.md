@@ -269,3 +269,5 @@ Fixed 12x8 grid (96 cells total):
 | Units | 10+ unit types | 3 simplified types |
 | Turns | Variable phase structure | Simple: orders -> resolve -> report |
 | Duration | 30-60 minutes | 15-30 minutes |
+
+> Complete Arcade Mode reference: See [quick-ref.md](./quick-ref.md)

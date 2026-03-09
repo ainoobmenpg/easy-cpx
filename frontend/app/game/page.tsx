@@ -662,6 +662,15 @@ function GameContent() {
         <div className="flex gap-6 text-sm items-center">
           <span className="text-gray-400 font-medium">{gameState.date}</span>
           <span className="text-blue-400 font-bold">T{gameState.turn}</span>
+          {/* Scoreboard for Arcade mode */}
+          {gameState.score && (
+            <div className="flex items-center gap-2 px-2 py-0.5 rounded bg-purple-900/30 border border-purple-700/50">
+              <span className="text-blue-400 font-bold">{gameState.score.player}</span>
+              <span className="text-gray-500">-</span>
+              <span className="text-red-400 font-bold">{gameState.score.enemy}</span>
+              <span className="text-[10px] text-purple-400">VP</span>
+            </div>
+          )}
           <span className={`font-bold px-2 py-0.5 rounded ${gameState.is_night ? 'bg-indigo-900/50 text-indigo-300' : 'bg-yellow-900/50 text-yellow-300'}`}>
             {gameState.is_night ? '🌙' : '☀️'} {gameState.time}
           </span>

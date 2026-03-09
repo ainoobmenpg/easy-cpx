@@ -57,24 +57,32 @@
 
 ### フェーズ4：ゲームロジック
 
-- [ ] Issue #57: Arcade: スコアリング(VP)+SITREPスコアボード+星評価 `cc:TODO`
+- [x] Issue #57: Arcade: スコアリング(VP)+SITREPスコアボード+星評価 `cc:完了`
   - 依存: #55, #50
+  - 完了: 2026-03-10
+  - 実装: results["score"] に player/enemy/turn 情報を追加、SITREPにVP表示
 
 - [x] Issue #58: Arcade: イベントデッキをAdjudicationに統合(20%/T) `cc:完了`
   - 依存: #55
   - 完了: 2026-03-09
   - 実装: EventDeckService を arcade_adjudication.py に統合、20%確率でターンテリガー
 
-- [ ] Issue #59: Arcade: 敵AI(最小) 隣接攻撃>前進>防御+ターゲティング `cc:TODO`
+- [x] Issue #59: Arcade: 敵AI(最小) 隣接攻撃>前進>防御+ターゲティング `cc:完了`
   - 依存: #55, #50
+  - 完了: 2026-03-10
+  - 実装: execute_enemy_turn() メソッド追加、隣接攻撃→前進→防御の優先順位
 
 ### フェーズ5：Docs + Tests
 
-- [ ] Issue #60: Docs: quick-ref.md をArcadeのSSoTにし他文書を従属化 `cc:TODO`
+- [x] Issue #60: Docs: quick-ref.md をArcadeのSSoTにし他文書を従属化 `cc:完了`
   - 依存: #51, #52, #53
+  - 完了: 2026-03-10
+  - 実装: quick-ref.md にユニット種/2D6/コマンド/勝利条件/イベントデッキを完善
 
-- [ ] Issue #62: Tests: Arcade adjudication/API/イベント/STRIKEの結合テスト `cc:TODO`
+- [x] Issue #62: Tests: Arcade adjudication/API/イベント/STRIKEの結合テスト `cc:完了`
   - 依存: #55, #50, #58
+  - 完了: 2026-03-10
+  - 実装: 13テスト全てパス
 
 ---
 

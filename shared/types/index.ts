@@ -150,6 +150,11 @@ export interface GameState {
   weather_effects: WeatherEffects;
   units: Unit[];
   player_knowledge?: Record<string, unknown>;
+  // Arcade mode scoring
+  score?: {
+    player: number;
+    enemy: number;
+  };
 }
 
 // Turn Log types for frontend

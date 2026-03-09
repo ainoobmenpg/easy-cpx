@@ -1,6 +1,6 @@
 # Game Rules
 
-> Quick Reference: See [quick-ref.md](./quick-ref.md) for arcade mode summary
+> Quick Reference: See [quick-ref.md](./quick-ref.md) for arcade mode complete reference
 
 ## Turn System
 

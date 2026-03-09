@@ -239,6 +239,10 @@ class Game(Base):
     map_width = Column(Integer, default=50)
     map_height = Column(Integer, default=50)
 
+    # Arcade mode scoring (VP - Victory Points)
+    player_score = Column(Integer, default=0)
+    enemy_score = Column(Integer, default=0)
+
     units = relationship("Unit", back_populates="game", cascade="all, delete-orphan")
     turns = relationship("Turn", back_populates="game", cascade="all, delete-orphan")
     orders = relationship("Order", back_populates="game", cascade="all, delete-orphan")

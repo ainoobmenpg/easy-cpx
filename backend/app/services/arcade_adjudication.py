@@ -6,6 +6,17 @@ from app.models import Game, GameMode, ArcadeUnit, OrderType
 from app.services.event_deck import EventDeckService
 
 
+# VP (Victory Point) values for destroying enemy units
+VP_VALUES = {
+    "armor": 3,
+    "infantry": 2,
+    "artillery": 4,
+    "air_defense": 3,
+    "recon": 2,
+    "support": 1,
+}
+
+
 # Arcade unit stats table
 ARCADE_UNIT_STATS = {
     "infantry": {"attack": 3, "defense": 3, "move": 2, "hp": 3},
@@ -289,6 +300,83 @@ class ArcadeAdjudication:
             "note": "WAIT has no tactical effect in Arcade mode"
         }
 
+    def execute_enemy_turn(self, game_id: int, terrain_data: dict) -> list:
+        """Execute enemy AI turn.
+
+        Priority:
+        1. Attack adjacent player units
+        2. Advance toward closest player unit
+        3. Defend if in unfavorable position
+        """
+        # Get all enemy and player units (ArcadeUnit uses strength > 0 to check if alive)
+        enemy_units = self.db.query(ArcadeUnit).filter(
+            ArcadeUnit.game_id == game_id,
+            ArcadeUnit.side == "enemy",
+            ArcadeUnit.strength > 0
+        ).all()
+
+        player_units = self.db.query(ArcadeUnit).filter(
+            ArcadeUnit.game_id == game_id,
+            ArcadeUnit.side == "player",
+            ArcadeUnit.strength > 0
+        ).all()
+
+        if not enemy_units or not player_units:
+            return []
+
+        enemy_orders = []
+
+        for enemy in enemy_units:
+            # Check if enemy can act
+            if not enemy.can_move and not enemy.can_attack:
+                continue
+
+            # Find closest player unit
+            closest_player = None
+            min_dist = float('inf')
+
+            for player in player_units:
+                dist = abs(enemy.x - player.x) + abs(enemy.y - player.y)
+                if dist < min_dist:
+                    min_dist = dist
+                    closest_player = player
+
+            if not closest_player:
+                continue
+
+            # Priority 1: Attack if adjacent and can attack
+            if min_dist == 1 and enemy.can_attack:
+                enemy_orders.append({
+                    "unit_id": enemy.id,
+                    "order_type": OrderType.ATTACK.value,
+                    "target_id": closest_player.id,
+                })
+            # Priority 2: Advance or Defend based on position
+            elif enemy.can_move:
+                # Determine move direction toward player
+                dx = 1 if closest_player.x > enemy.x else -1 if closest_player.x < enemy.x else 0
+                dy = 1 if closest_player.y > enemy.y else -1 if closest_player.y < enemy.y else 0
+
+                new_x = enemy.x + dx
+                new_y = enemy.y + dy
+
+                # Check if move is valid (within bounds)
+                if 0 <= new_x < 12 and 0 <= new_y < 8:
+                    enemy_orders.append({
+                        "unit_id": enemy.id,
+                        "order_type": OrderType.MOVE.value,
+                        "location_x": new_x,
+                        "location_y": new_y,
+                    })
+                else:
+                    # Can't advance, defend instead
+                    enemy_orders.append({
+                        "unit_id": enemy.id,
+                        "order_type": OrderType.DEFEND.value,
+                    })
+
+        return enemy_orders
+
     def get_game_state(self, game_id: int) -> dict:
         """Get current game state for Arcade mode"""
         game = self.db.query(Game).filter(Game.id == game_id).first()
@@ -301,6 +389,10 @@ class ArcadeAdjudication:
             "game_id": game.id,
             "turn": game.current_turn,
             "mode": "arcade",
+            "score": {
+                "player": game.player_score or 0,
+                "enemy": game.enemy_score or 0,
+            },
             "units": [
                 {
                     "id": u.id,
@@ -447,7 +539,25 @@ class ArcadeAdjudication:
                     unit.strength -= attack_result["damage_to_attacker"]
 
                     if target.strength <= 0:
-                        results["destructions"].append(target.name)
+                        # Award VP for destroying enemy unit
+                        vp_value = VP_VALUES.get(target.unit_type, 1)
+                        if target.side == "enemy":
+                            game.player_score = (game.player_score or 0) + vp_value
+                            results["destructions"].append({
+                                "unit": target.name,
+                                "unit_type": target.unit_type,
+                                "vp_awarded": vp_value,
+                                "side": "enemy"
+                            })
+                        else:
+                            # Enemy destroyed player unit
+                            game.enemy_score = (game.enemy_score or 0) + vp_value
+                            results["destructions"].append({
+                                "unit": target.name,
+                                "unit_type": target.unit_type,
+                                "vp_awarded": vp_value,
+                                "side": "player"
+                            })
                         self.db.delete(target)
 
                     results["attacks"].append(
@@ -511,9 +621,78 @@ class ArcadeAdjudication:
                 # Store active modifiers for this turn
                 results["event_modifiers"] = self.event_deck.get_active_modifiers(modified_state)
 
+        # Execute enemy AI turn
+        enemy_orders = self.execute_enemy_turn(game_id, game.terrain_data or {})
+
+        # Process enemy orders
+        for order in enemy_orders:
+            unit = next((u for u in units if u.id == order["unit_id"]), None)
+            if not unit or unit.side != "enemy":
+                continue
+
+            order_type = order.get("order_type")
+
+            if order_type == OrderType.MOVE.value:
+                move_result = self.resolve_move(
+                    unit,
+                    order.get("location_x", unit.x),
+                    order.get("location_y", unit.y),
+                    game.terrain_data or {},
+                )
+                if move_result["result"] == "SUCCESS":
+                    unit.x = move_result["new_x"]
+                    unit.y = move_result["new_y"]
+                results["moves"].append({"unit": unit.name, **move_result})
+
+            elif order_type == OrderType.ATTACK.value:
+                target_id = order.get("target_id") or (order.get("target_units", [])[0] if order.get("target_units") else None)
+                if target_id is None:
+                    continue
+                target = next((u for u in units if u.id == target_id), None)
+                if target:
+                    attack_result = self.resolve_attack(unit, target, game)
+                    target.strength -= attack_result["damage_to_defender"]
+                    unit.strength -= attack_result["damage_to_attacker"]
+
+                    if target.strength <= 0:
+                        # Award VP for destroying enemy unit
+                        vp_value = VP_VALUES.get(target.unit_type, 1)
+                        if target.side == "enemy":
+                            game.player_score = (game.player_score or 0) + vp_value
+                            results["destructions"].append({
+                                "unit": target.name,
+                                "unit_type": target.unit_type,
+                                "vp_awarded": vp_value,
+                                "side": "enemy"
+                            })
+                        else:
+                            game.enemy_score = (game.enemy_score or 0) + vp_value
+                            results["destructions"].append({
+                                "unit": target.name,
+                                "unit_type": target.unit_type,
+                                "vp_awarded": vp_value,
+                                "side": "player"
+                            })
+                        self.db.delete(target)
+
+                    results["attacks"].append({
+                        "attacker": unit.name,
+                        "defender": target.name,
+                        **attack_result,
+                    })
+
+            elif order_type == OrderType.DEFEND.value:
+                defend_result = self.resolve_defend(unit)
+                results["defends"].append({"unit": unit.name, **defend_result})
+
+        self.db.commit()
+
+        # Refresh units after enemy turn for victory check
+        units = self.db.query(ArcadeUnit).filter(ArcadeUnit.game_id == game_id).all()
+
         # Check victory conditions
-        player_units = [u for u in units if u.side == "player"]
-        enemy_units = [u for u in units if u.side == "enemy"]
+        player_units = [u for u in units if u.side == "player" and u.strength > 0]
+        enemy_units = [u for u in units if u.side == "enemy" and u.strength > 0]
 
         if not enemy_units:
             results["victory"] = "PLAYER_WINS"
@@ -521,6 +700,32 @@ class ArcadeAdjudication:
             results["victory"] = "ENEMY_WINS"
         else:
             results["victory"] = None
+
+        # Add scoring info to results
+        results["score"] = {
+            "player": game.player_score or 0,
+            "enemy": game.enemy_score or 0,
+            "turn": game.current_turn,
+        }
+
+        # Generate SITREP text with score info
+        sitrep_parts = []
+        if results.get("destructions"):
+            for dest in results["destructions"]:
+                if dest["side"] == "enemy":
+                    sitrep_parts.append(
+                        f"{dest['unit']}({dest['unit_type']})を撃破! +{dest['vp_awarded']}VP"
+                    )
+                else:
+                    sitrep_parts.append(
+                        f"{dest['unit']}({dest['unit_type']})が敵に撃破された"
+                    )
+        if results.get("attacks"):
+            sitrep_parts.append(f"{len(results['attacks'])}回の攻撃を実施")
+        if results.get("moves"):
+            sitrep_parts.append(f"{len(results['moves'])}個のユニットが移動")
+
+        results["sitrep"] = " | ".join(sitrep_parts) if sitrep_parts else "問題は発生しませんでした"
 
         # Advance turn
         game.current_turn += 1
