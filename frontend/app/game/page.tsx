@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback, memo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import API from '../lib/api';
 
 interface Unit {
   id: number;
@@ -154,7 +155,7 @@ function GameContent() {
 
   const fetchGameState = async () => {
     try {
-      const res = await fetch(`http://localhost:8000/api/game/${gameId}/state`);
+      const res = await fetch(API.gameState(gameId));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setGameState(data);
@@ -170,7 +171,7 @@ function GameContent() {
     if (!orderInput.trim()) return;
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:8000/api/parse-order', {
+      const res = await fetch(API.parseOrder, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ player_input: orderInput, game_id: gameId })
@@ -185,7 +186,7 @@ function GameContent() {
     if (!parsedOrder || !selectedUnit) return;
     setLoading(true);
     try {
-      await fetch('http://localhost:8000/api/orders/', {
+      await fetch(API.orders, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -207,7 +208,7 @@ function GameContent() {
   const advanceTurn = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:8000/api/advance-turn', {
+      const res = await fetch(API.advanceTurn, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ game_id: gameId })
@@ -217,7 +218,7 @@ function GameContent() {
       setGameState(prev => prev ? { ...prev, turn: data.turn + 1, time: data.next_time } : null);
 
       // Refresh game state including units after turn advancement
-      const stateRes = await fetch(`http://localhost:8000/api/game/${gameId}/state`);
+      const stateRes = await fetch(API.gameState(gameId));
       const stateData = await stateRes.json();
       setGameState(stateData);
 
@@ -267,7 +268,7 @@ function GameContent() {
   const endGame = async () => {
     if (!confirm('End the game and view debriefing?')) return;
     try {
-      await fetch('http://localhost:8000/api/game/end', {
+      await fetch(API.gameEnd, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ game_id: gameId })

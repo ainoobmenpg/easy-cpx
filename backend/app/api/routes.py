@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
 from app.database import get_db
-from app.models import Game, Unit, Turn, Order, OrderType
+from app.models import Game, Unit, Turn, Order, OrderType, PlayerKnowledge
 from app.services.adjudication import RuleEngine
 from app.services.ai_client import AIClient
 from app.services.scenario_manager import ScenarioManager
@@ -14,15 +14,28 @@ import asyncio
 router = APIRouter()
 
 
+# Pydantic schemas for request bodies
+class GameCreate(BaseModel):
+    name: str
+
+
 # Game endpoints
 @router.post("/games/")
-def create_game(name: str, db: Session = Depends(get_db)):
+def create_game(request: GameCreate, db: Session = Depends(get_db)):
     """Create a new game"""
-    game = Game(name=name)
+    game = Game(name=request.name)
     db.add(game)
     db.commit()
     db.refresh(game)
-    return game
+    return {
+        "id": game.id,
+        "name": game.name,
+        "current_turn": game.current_turn,
+        "current_time": game.current_time,
+        "weather": game.weather,
+        "phase": game.phase,
+        "is_active": game.is_active
+    }
 
 
 @router.get("/games/{game_id}")
@@ -240,12 +253,74 @@ async def advance_turn(request: TurnAdvanceRequest, db: Session = Depends(get_db
 
 @router.get("/game/{game_id}/state")
 def get_game_state(game_id: int, db: Session = Depends(get_db)):
-    """Get current game state"""
+    """Get current game state with Fog of War applied"""
     game = db.query(Game).filter(Game.id == game_id).first()
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
+
     engine = RuleEngine(db)
-    return engine.get_game_state(game_id)
+    state = engine.get_game_state(game_id)
+
+    # Apply Fog of War - filter enemy units based on player knowledge
+    player_knowledge = db.query(PlayerKnowledge).filter(
+        PlayerKnowledge.game_id == game_id
+    ).all()
+
+    # Build a map of known enemy units
+    known_enemies = {}
+    for pk in player_knowledge:
+        if pk.unit_id:
+            known_enemies[pk.unit_id] = {
+                "x": pk.x,
+                "y": pk.y,
+                "confidence": pk.confidence,
+                "confidence_score": pk.confidence_score,
+                "last_observed_turn": pk.last_observed_turn,
+                "interpreted_type": pk.interpreted_type,
+                "position_accuracy": pk.position_accuracy
+            }
+
+    # Filter units - player units are fully visible, enemy units are filtered
+    filtered_units = []
+    for unit in state.get("units", []):
+        if unit["side"] == "player":
+            # Player units are fully visible
+            filtered_units.append({
+                **unit,
+                "is_observed": True,
+                "observation_confidence": "confirmed"
+            })
+        else:
+            # Enemy units - check if observed
+            known = known_enemies.get(unit["id"])
+            if known:
+                # Enemy is observed - return with knowledge
+                filtered_units.append({
+                    **unit,
+                    "x": known["x"],  # Use observed position
+                    "y": known["y"],
+                    "is_observed": True,
+                    "observation_confidence": known["confidence"],
+                    "confidence_score": known["confidence_score"],
+                    "last_observed_turn": known["last_observed_turn"],
+                    "last_known_type": known.get("interpreted_type"),
+                    "position_accuracy": known.get("position_accuracy", 0)
+                })
+            else:
+                # Enemy not observed - hide true position
+                filtered_units.append({
+                    **unit,
+                    "x": None,
+                    "y": None,
+                    "is_observed": False,
+                    "observation_confidence": "unknown",
+                    "confidence_score": 0,
+                    "last_observed_turn": None,
+                    "status": "unknown"
+                })
+
+    state["units"] = filtered_units
+    return state
 
 
 @router.get("/game/{game_id}/sitrep")

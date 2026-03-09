@@ -51,8 +51,18 @@ class ScenarioManager:
         # Import here to avoid circular imports
         from app.models import Game, Unit, UnitStatus, SupplyLevel
         from app.services.initial_setup import InitialSetupService
+        from app.services.terrain import generate_map_terrain, get_terrain_display_info
 
-        # Create game
+        # Get map dimensions from scenario
+        map_width = scenario["map_size"]["width"]
+        map_height = scenario["map_size"]["height"]
+
+        # Generate terrain with scenario seed (terrain is now deterministic per scenario)
+        terrain_seed = scenario.get("terrain_seed", 42)
+        terrain_map = generate_map_terrain(map_width, map_height, terrain_seed)
+        terrain_info = get_terrain_display_info()
+
+        # Create game with terrain data persisted
         game = Game(
             name=game_name,
             current_turn=1,
@@ -61,16 +71,21 @@ class ScenarioManager:
             weather=scenario.get("initial_weather", "clear"),
             phase="orders",
             is_active=True,
-            scenario_id=scenario_id  # Store scenario ID
+            scenario_id=scenario_id,  # Store scenario ID
+            terrain_data={
+                "map": terrain_map,
+                "info": terrain_info,
+                "seed": terrain_seed
+            },
+            map_width=map_width,
+            map_height=map_height
         )
         db.add(game)
         db.commit()
         db.refresh(game)
 
         # Initialize setup service with terrain seed
-        setup = InitialSetupService(random_seed=scenario.get("terrain_seed"))
-        map_width = scenario["map_size"]["width"]
-        map_height = scenario["map_size"]["height"]
+        setup = InitialSetupService(random_seed=terrain_seed)
 
         # Create player units
         player_forces = scenario.get("player_forces", {})

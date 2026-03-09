@@ -63,7 +63,7 @@ class TestGameEndpoints:
 
     def test_create_game(self, client, test_db):
         """Test POST /api/games/ creates a game"""
-        response = client.post("/api/games/", params={"name": "Test Game"})
+        response = client.post("/api/games/", json={"name": "Test Game"})
         assert response.status_code == 200
         data = response.json()
         assert data["name"] == "Test Game"

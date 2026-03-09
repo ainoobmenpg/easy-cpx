@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import API from '../lib/api';
 
 interface DebriefingData {
   game_id: number;
@@ -70,7 +71,7 @@ function DebriefingContent() {
       return;
     }
 
-    fetch(`http://localhost:8000/api/game/${gameId}/debriefing`)
+    fetch(API.gameDebriefing(gameId))
       .then(res => {
         if (!res.ok) {
           return res.text().then(text => {

@@ -97,6 +97,13 @@ class Game(Base):
     is_active = Column(Boolean, default=True)
     scenario_id = Column(String, nullable=True)  # Scenario ID for this game
 
+    # Terrain data - stored as JSON to persist across turns
+    terrain_data = Column(JSON, nullable=True)
+
+    # Map configuration from scenario
+    map_width = Column(Integer, default=50)
+    map_height = Column(Integer, default=50)
+
     units = relationship("Unit", back_populates="game")
     turns = relationship("Turn", back_populates="game")
     orders = relationship("Order", back_populates="game")

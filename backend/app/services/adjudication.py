@@ -964,9 +964,16 @@ class RuleEngine:
         from app.services.terrain import generate_map_terrain, get_terrain_display_info
         from app.services.weather_effects import WeatherEffects
 
-        # Generate terrain data
-        terrain_map = generate_map_terrain(50, 50)
-        terrain_info = get_terrain_display_info()
+        # Use persisted terrain data if available, otherwise generate (for backward compatibility)
+        if game.terrain_data:
+            terrain_map = game.terrain_data.get("map", {})
+            terrain_info = game.terrain_data.get("info", get_terrain_display_info())
+        else:
+            # Fallback: generate terrain (legacy behavior for games without persisted terrain)
+            map_width = getattr(game, 'map_width', 50)
+            map_height = getattr(game, 'map_height', 50)
+            terrain_map = generate_map_terrain(map_width, map_height)
+            terrain_info = get_terrain_display_info()
 
         # Get weather effects
         weather_service = WeatherEffects()

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import API from '../lib/api';
 
 interface Scenario {
   id: string;
@@ -34,7 +35,7 @@ export default function ScenariosPage() {
   const [startingGame, setStartingGame] = useState(false);
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/scenarios')
+    fetch(API.scenarios)
       .then(res => {
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);
@@ -57,7 +58,7 @@ export default function ScenariosPage() {
   const handleStartGame = async (scenarioId: string) => {
     setStartingGame(true);
     try {
-      const res = await fetch('http://localhost:8000/api/game/start', {
+      const res = await fetch(API.gameStart, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
