@@ -4,6 +4,12 @@
 from typing import Optional
 from enum import Enum
 
+# Import normalization function from models
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from app.models import normalize_unit_type
+
 
 class UnitBehaviorProfile:
     """Defines how a unit type should behave"""
@@ -150,16 +156,12 @@ UNIT_BEHAVIOR_PROFILES: dict[str, UnitBehaviorProfile] = {
 
 def get_unit_profile(unit_type: str) -> UnitBehaviorProfile:
     """Get behavior profile for a unit type"""
-    unit_type_lower = unit_type.lower()
+    # Use canonical form
+    canonical_type = normalize_unit_type(unit_type)
 
     # Try exact match first
-    if unit_type_lower in UNIT_BEHAVIOR_PROFILES:
-        return UNIT_BEHAVIOR_PROFILES[unit_type_lower]
-
-    # Try partial matches
-    for profile_type, profile in UNIT_BEHAVIOR_PROFILES.items():
-        if profile_type in unit_type_lower:
-            return profile
+    if canonical_type in UNIT_BEHAVIOR_PROFILES:
+        return UNIT_BEHAVIOR_PROFILES[canonical_type]
 
     return UNIT_BEHAVIOR_PROFILES["default"]
 
@@ -317,12 +319,9 @@ UNIT_COMPATIBILITY_MATRIX: dict[str, dict[str, float]] = {
 
 def get_compatibility_bonus(attacker_type: str, defender_type: str) -> float:
     """Get combat bonus/penalty based on unit type matchup"""
-    attacker = attacker_type.lower()
-    defender = defender_type.lower()
-
-    # Normalize types
-    attacker = _normalize_unit_type(attacker)
-    defender = _normalize_unit_type(defender)
+    # Normalize types to canonical form
+    attacker = normalize_unit_type(attacker_type)
+    defender = normalize_unit_type(defender_type)
 
     # Get attacker row
     if attacker not in UNIT_COMPATIBILITY_MATRIX:
@@ -340,49 +339,3 @@ def get_compatibility_bonus(attacker_type: str, defender_type: str) -> float:
             return bonus
 
     return 0.0
-
-
-def _normalize_unit_type(unit_type: str) -> str:
-    """Normalize unit type for compatibility lookup"""
-    unit_type = unit_type.lower()
-
-    if "tank" in unit_type or "armor" in unit_type or "m1" in unit_type or "leopard" in unit_type or "t72" in unit_type or "t80" in unit_type or "bradley" in unit_type or "bmp" in unit_type or "marder" in unit_type:
-        return "armor"
-
-    if "atgm" in unit_type or "anti-tank" in unit_type:
-        return "atgm"
-
-    if "sniper" in unit_type:
-        return "sniper"
-
-    if "scout" in unit_type:
-        return "scout"
-
-    if "infantry" in unit_type or "inf" in unit_type:
-        return "infantry"
-
-    if "artillery" in unit_type or "howitzer" in unit_type or "mlrs" in unit_type or "grad" in unit_type or "m109" in unit_type or "pzh" in unit_type:
-        return "artillery"
-
-    if "air_defense" in unit_type or "sam" in unit_type or "patriot" in unit_type or "flak" in unit_type or "gepard" in unit_type or "stinger" in unit_type or "sa6" in unit_type or "sa11" in unit_type:
-        return "air_defense"
-
-    if "attack" in unit_type and "helo" in unit_type or "apache" in unit_type or "hind" in unit_type:
-        return "attack_helo"
-
-    if "transport" in unit_type and "helo" in unit_type or "blackhawk" in unit_type or "mi17" in unit_type or "hip" in unit_type:
-        return "transport_helo"
-
-    if "aircraft" in unit_type or "fighter" in unit_type or "f15" in unit_type or "f16" in unit_type or "mig" in unit_type or "tornado" in unit_type or "su25" in unit_type:
-        return "aircraft"
-
-    if "uav" in unit_type or "drone" in unit_type or "reaper" in unit_type or "shadow" in unit_type or "forpost" in unit_type:
-        return "uav"
-
-    if "recon" in unit_type:
-        return "recon"
-
-    if "support" in unit_type or "supply" in unit_type:
-        return "support"
-
-    return "default"

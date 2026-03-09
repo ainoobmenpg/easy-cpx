@@ -13,7 +13,7 @@
     "target_units": {
       "type": "array",
       "items": {"type": "string"},
-      "description": "Unit IDs or unit names targeted by the order"
+      "description": "Unit IDs (strings) targeted by the order"
     },
     "intent": {
       "type": "string",

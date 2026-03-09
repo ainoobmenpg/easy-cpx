@@ -132,7 +132,7 @@ function GameContent() {
   const searchParams = useSearchParams();
   const gameIdParam = searchParams.get('gameId');
   const router = useRouter();
-  const [gameId] = useState(gameIdParam ? parseInt(gameIdParam, 10) : 1);
+  const [gameId, setGameId] = useState<number | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [sitrep, setSitrep] = useState<Sitrep | null>(null);
   const [orderInput, setOrderInput] = useState('');
@@ -151,9 +151,41 @@ function GameContent() {
   const [terrainTooltip, setTerrainTooltip] = useState<{ x: number; y: number; terrain: string; info: { name: string; symbol: string; color: string } } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { fetchGameState(); }, [gameId]);
+  // Resolve gameId from URL param or API
+  useEffect(() => {
+    if (gameIdParam) {
+      const id = parseInt(gameIdParam, 10);
+      if (!isNaN(id) && id > 0) {
+        setGameId(id);
+        return;
+      }
+    }
+    // No gameId in URL, fetch game list to find the first available game
+    fetch(`${API.baseUrl}/api/games/`)
+      .then(res => res.json())
+      .then(games => {
+        if (games && games.length > 0) {
+          // Redirect to first available game
+          router.replace(`/game?gameId=${games[0].id}`);
+        } else {
+          // No games available, redirect to new game page
+          router.replace('/new-game');
+        }
+      })
+      .catch(() => {
+        // Error fetching games, redirect to new game page
+        router.replace('/new-game');
+      });
+  }, [gameIdParam, router]);
+
+  useEffect(() => {
+    if (gameId !== null) {
+      fetchGameState();
+    }
+  }, [gameId]);
 
   const fetchGameState = async () => {
+    if (gameId === null) return;
     try {
       const res = await fetch(API.gameState(gameId));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -168,7 +200,7 @@ function GameContent() {
   };
 
   const parseOrder = async () => {
-    if (!orderInput.trim()) return;
+    if (!orderInput.trim() || gameId === null) return;
     setLoading(true);
     try {
       const res = await fetch(API.parseOrder, {
@@ -183,7 +215,7 @@ function GameContent() {
   };
 
   const submitOrder = async () => {
-    if (!parsedOrder || !selectedUnit) return;
+    if (!parsedOrder || !selectedUnit || gameId === null) return;
     setLoading(true);
     try {
       await fetch(API.orders, {
@@ -206,6 +238,7 @@ function GameContent() {
   };
 
   const advanceTurn = async () => {
+    if (gameId === null) return;
     setLoading(true);
     try {
       const res = await fetch(API.advanceTurn, {
@@ -266,7 +299,7 @@ function GameContent() {
   };
 
   const endGame = async () => {
-    if (!confirm('End the game and view debriefing?')) return;
+    if (gameId === null || !confirm('End the game and view debriefing?')) return;
     try {
       await fetch(API.gameEnd, {
         method: 'POST',

@@ -1,6 +1,6 @@
 # Rule Engine for Operational CPX
 from sqlalchemy.orm import Session
-from app.models import Unit, Turn, Order, Game, OrderType, UnitStatus, SupplyLevel, EnemyKnowledge
+from app.models import Unit, Turn, Order, Game, OrderType, UnitStatus, SupplyLevel, EnemyKnowledge, PlayerKnowledge, CommanderOrder
 from datetime import datetime
 from typing import Optional
 import random
@@ -21,6 +21,14 @@ from app.data.unit_profiles import (
     get_compatibility_bonus,
     UNIT_BEHAVIOR_PROFILES,
 )
+
+# Import terrain services for movement cost calculation
+from app.services.terrain import TerrainType, TerrainEffects
+
+# Import commander order and reporting services
+from app.services.commander_order_service import CommanderOrderService
+from app.services.reporting import ReportingSystem
+from app.data.scenarios import get_scenario
 
 
 # Adjudication condition types
@@ -289,12 +297,27 @@ class AdjudicationCriteria:
 class RuleEngine:
     def __init__(self, db: Session):
         self.db = db
+        self.commander_order_service = CommanderOrderService()
+        self.reporting_system = ReportingSystem()
 
     def adjudicate_turn(self, game_id: int) -> dict:
         """Execute one turn of adjudication"""
         game = self.db.query(Game).filter(Game.id == game_id).first()
         if not game:
             return {"error": "Game not found"}
+
+        # Load CommanderOrder from DB and configure reporting system
+        commander_order = self.db.query(CommanderOrder).filter(
+            CommanderOrder.game_id == game_id,
+            CommanderOrder.status == "active"
+        ).first()
+
+        if commander_order and commander_order.reporting_requirements:
+            self.reporting_system.set_reporting_requirements(commander_order.reporting_requirements)
+            logger.info(f"[REPORTING] Configured with {len(commander_order.reporting_requirements)} requirements")
+
+        # Record current turn for reporting system
+        current_turn = game.current_turn
 
         turn = self.db.query(Turn).filter(
             Turn.game_id == game_id,
@@ -338,6 +361,10 @@ class RuleEngine:
         # Check game end conditions
         game_end = self._check_game_end_conditions(game_id)
 
+        # Check reporting compliance and get commander inquiries
+        inquiries = self.reporting_system.check_reporting_compliance(current_turn)
+        reporting_summary = self.reporting_system.get_reporting_summary()
+
         # Update turn phase
         turn.phase = "complete"
         game.current_turn += 1
@@ -357,7 +384,17 @@ class RuleEngine:
             "enemy_recon_events": enemy_recon_events,
             "next_time": game.current_time,
             "game_ended": game_end["ended"],
-            "game_end_reason": game_end["reason"]
+            "game_end_reason": game_end["reason"],
+            "commander_inquiries": [
+                {
+                    "id": i.inquiry_id,
+                    "subject": i.subject,
+                    "question": i.question,
+                    "urgency": i.urgency
+                }
+                for i in inquiries
+            ],
+            "reporting_summary": reporting_summary
         }
 
     def _check_game_end_conditions(self, game_id: int) -> dict:
@@ -388,57 +425,404 @@ class RuleEngine:
 
         return {"ended": False, "reason": None}
 
+    def _calculate_max_movement(self, unit: Unit) -> float:
+        """Calculate maximum movement points for a unit based on type and supply status.
+
+        Base movement by unit type:
+        - infantry: 3.0 cells
+        - armor: 4.0 cells
+        - artillery: 2.5 cells
+        - air_defense: 2.5 cells
+        - reconnaissance: 4.5 cells
+        - support: 3.0 cells
+        - default: 3.0 cells
+
+        Supply modifiers:
+        - FULL: 100%
+        - DEPLETED: 50%
+        - EXHAUSTED: 0% (cannot move)
+        """
+        # Base movement by unit type
+        unit_type_movement = {
+            "infantry": 3.0,
+            "armor": 4.0,
+            "artillery": 2.5,
+            "air_defense": 2.5,
+            "reconnaissance": 4.5,
+            "recon": 4.5,
+            "atgm": 2.5,
+            "scout": 3.5,
+            "sniper": 2.5,
+            "support": 3.0,
+            "transport_helo": 5.0,
+            "attack_helo": 4.0,
+            "aircraft": 8.0,
+            "uav": 6.0,
+        }
+
+        # Get base movement for unit type
+        normalized_type = unit.unit_type.lower() if unit.unit_type else "default"
+        base_movement = unit_type_movement.get(normalized_type, 3.0)
+
+        # Apply fuel modifier
+        fuel_modifier = {
+            SupplyLevel.FULL: 1.0,
+            SupplyLevel.DEPLETED: 0.5,
+            SupplyLevel.EXHAUSTED: 0.0,
+        }.get(unit.fuel, 1.0)
+
+        # Apply readiness modifier
+        readiness_modifier = {
+            SupplyLevel.FULL: 1.0,
+            SupplyLevel.DEPLETED: 0.7,
+            SupplyLevel.EXHAUSTED: 0.0,
+        }.get(unit.readiness, 1.0)
+
+        max_movement = base_movement * fuel_modifier * readiness_modifier
+
+        logger.debug(f"[MOVE] {unit.name}: base={base_movement}, fuel={unit.fuel.value}, readiness={unit.readiness.value} -> max={max_movement:.2f}")
+
+        return max_movement
+
+    def _get_advance_direction(self, game: Game, side: str) -> dict:
+        """Get advance direction for a side from scenario configuration.
+
+        Returns:
+            dict: Direction vector with 'x' and 'y' keys (e.g., {"x": 1, "y": 0})
+                  Defaults to {"x": 1, "y": 0} for player, {"x": -1, "y": 0} for enemy
+                  if scenario does not have advance_directions configured.
+        """
+        if not game or not game.scenario_id:
+            # Fallback to default directions
+            return {"x": 1, "y": 0} if side == "player" else {"x": -1, "y": 0}
+
+        scenario = get_scenario(game.scenario_id)
+        if not scenario:
+            # Fallback to default directions
+            return {"x": 1, "y": 0} if side == "player" else {"x": -1, "y": 0}
+
+        advance_directions = scenario.get("advance_directions", {})
+        direction = advance_directions.get(side)
+
+        if direction:
+            return direction
+
+        # Fallback to default directions
+        return {"x": 1, "y": 0} if side == "player" else {"x": -1, "y": 0}
+
+    def _get_terrain_cost(self, game: Game, x: int, y: int) -> float:
+        """Get terrain movement cost at a position."""
+        if not game.terrain_data:
+            return 1.0  # Default plain terrain cost
+
+        terrain_map = game.terrain_data.get("map", {})
+        terrain_key = f"{x},{y}"
+
+        if terrain_key not in terrain_map:
+            return 1.0  # Default plain terrain cost
+
+        terrain_str = terrain_map[terrain_key]
+        try:
+            terrain = TerrainType(terrain_str)
+        except ValueError:
+            return 1.0
+
+        # Get movement cost from TerrainEffects
+        effects = TerrainEffects()
+        terrain_effect = effects.TERRAIN_EFFECTS.get(terrain)
+        if terrain_effect:
+            return terrain_effect.movement_cost
+
+        return 1.0
+
+    def _calculate_path_cost(self, game: Game, from_x: float, from_y: float, to_x: float, to_y: float) -> float:
+        """Calculate movement cost from current position to target considering terrain.
+
+        Uses Manhattan distance with terrain cost averaging.
+        """
+        # Simple distance calculation (Manhattan)
+        dx = abs(to_x - from_x)
+        dy = abs(to_y - from_y)
+        base_distance = dx + dy
+
+        if base_distance == 0:
+            return 0.0
+
+        # If no terrain data, return base distance
+        if not game.terrain_data:
+            return base_distance
+
+        # Calculate average terrain cost along path
+        terrain_effects = TerrainEffects()
+        terrain_map = game.terrain_data.get("map", {})
+        total_cost = 0.0
+        steps = max(int(base_distance), 1)
+
+        for i in range(steps):
+            # Interpolate position along path
+            ratio = (i + 1) / steps
+            check_x = int(from_x + (to_x - from_x) * ratio)
+            check_y = int(from_y + (to_y - from_y) * ratio)
+
+            # Clamp to map bounds
+            check_x = max(0, min(game.map_width - 1, check_x))
+            check_y = max(0, min(game.map_height - 1, check_y))
+
+            # Get terrain cost at this position
+            terrain = terrain_map.get(f"{check_x},{check_y}", "plain")
+            try:
+                terrain_type = TerrainType(terrain)
+            except ValueError:
+                terrain_type = TerrainType.PLAIN
+
+            cost = terrain_effects.TERRAIN_EFFECTS.get(terrain_type, terrain_effects.TERRAIN_EFFECTS[TerrainType.PLAIN]).movement_cost
+
+            # If water (impassable), return infinity
+            if cost >= 999.0:
+                return 999.0
+
+            total_cost += cost
+
+        avg_cost = total_cost / steps
+        path_cost = base_distance * avg_cost
+
+        logger.debug(f"[MOVE] Path cost: ({from_x:.1f},{from_y:.1f}) -> ({to_x:.1f},{to_y:.1f}): distance={base_distance}, avg_terrain={avg_cost:.2f}, total_cost={path_cost:.2f}")
+
+        return path_cost
+
+    def _find_reachable_position(self, game: Game, unit: Unit, target_x: float, target_y: float, max_movement: float) -> tuple[float, float]:
+        """Find the furthest reachable position towards target within movement limit.
+
+        Returns:
+            Tuple of (reachable_x, reachable_y)
+        """
+        old_x, old_y = unit.x, unit.y
+
+        # Check if target is already reachable directly
+        direct_cost = self._calculate_path_cost(game, old_x, old_y, target_x, target_y)
+
+        if direct_cost <= max_movement:
+            # Target is directly reachable
+            logger.debug(f"[MOVE] {unit.name}: Target directly reachable (cost={direct_cost:.2f} <= max={max_movement:.2f})")
+            return target_x, target_y
+
+        # Need to find furthest reachable point along the path
+        # Binary search for max distance
+        low, high = 0.0, 1.0
+
+        for _ in range(10):  # 10 iterations for precision
+            mid = (low + high) / 2
+            intermediate_x = old_x + (target_x - old_x) * mid
+            intermediate_y = old_y + (target_y - old_y) * mid
+
+            cost = self._calculate_path_cost(game, old_x, old_y, intermediate_x, intermediate_y)
+
+            if cost <= max_movement:
+                low = mid
+            else:
+                high = mid
+
+        # Calculate final position
+        final_x = old_x + (target_x - old_x) * low
+        final_y = old_y + (target_y - old_y) * low
+
+        final_cost = self._calculate_path_cost(game, old_x, old_y, final_x, final_y)
+
+        logger.debug(f"[MOVE] {unit.name}: Partial movement to ({final_x:.1f},{final_y:.1f}), cost={final_cost:.2f}, ratio={low:.2f}")
+
+        return final_x, final_y
+
     def _adjudicate_order(self, order: Order) -> dict:
-        """Adjudicate a single order"""
+        # Fetch unit for this order
         unit = self.db.query(Unit).filter(Unit.id == order.unit_id).first()
         if not unit:
             logger.warning(f"[ORDER] Order {order.id}: Unit not found")
             return {"order_id": order.id, "outcome": "failed", "reason": "Unit not found"}
 
-        logger.info(f"[ORDER] {unit.name} ({unit.side}) - {order.order_type.value}: {order.intent[:50] if order.intent else 'N/A'}...")
+        # Fetch game for terrain access
+        game = self.db.query(Game).filter(Game.id == order.game_id).first()
 
         changes = []
         outcome = "success"  # Default outcome
 
         # Process based on order type
         if order.order_type == OrderType.MOVE:
-            if order.location_x is not None and order.location_y is not None:
-                old_x, old_y = unit.x, unit.y
-                unit.x = order.location_x
-                unit.y = order.location_y
+            # Check if unit can move (fuel not exhausted)
+            can_move = unit.fuel != SupplyLevel.EXHAUSTED
+
+            if not can_move:
+                logger.warning(f"[MOVE] {unit.name}: Cannot move - fuel exhausted")
+                outcome = "failed"
                 changes.append({
-                    "type": "move",
+                    "type": "move_blocked",
                     "target": unit.id,
-                    "field": "position",
-                    "old_value": {"x": old_x, "y": old_y},
-                    "new_value": {"x": unit.x, "y": unit.y}
+                    "reason": "fuel_exhausted",
+                    "message": "燃料が枯渇しているため移動できません"
                 })
-                outcome = "success"
-                logger.info(f"[MOVE] {unit.name}: ({old_x:.1f},{old_y:.1f}) -> ({unit.x:.1f},{unit.y:.1f})")
+            elif order.location_x is not None and order.location_y is not None:
+                # Target location specified - calculate reachable position
+                old_x, old_y = unit.x, unit.y
+                target_x, target_y = order.location_x, order.location_y
+
+                # Calculate max movement points
+                max_movement = self._calculate_max_movement(unit)
+
+                if max_movement <= 0:
+                    logger.warning(f"[MOVE] {unit.name}: Cannot move - no movement points")
+                    outcome = "failed"
+                    changes.append({
+                        "type": "move_blocked",
+                        "target": unit.id,
+                        "reason": "no_movement_points",
+                        "message": "移動力がありません"
+                    })
+                else:
+                    # Find reachable position considering terrain
+                    new_x, new_y = self._find_reachable_position(
+                        game, unit, target_x, target_y, max_movement
+                    )
+
+                    # Check if reached target or partial movement
+                    distance_to_target = abs(target_x - old_x) + abs(target_y - old_y)
+                    actual_distance = abs(new_x - old_x) + abs(new_y - old_y)
+
+                    unit.x = new_x
+                    unit.y = new_y
+
+                    # Determine outcome based on whether target was reached
+                    if actual_distance >= distance_to_target - 0.01:
+                        outcome = "success"
+                        logger.info(f"[MOVE] {unit.name}: ({old_x:.1f},{old_y:.1f}) -> ({unit.x:.1f},{unit.y:.1f}) [target reached]")
+                    else:
+                        outcome = "partial"
+                        logger.info(f"[MOVE] {unit.name}: ({old_x:.1f},{old_y:.1f}) -> ({unit.x:.1f},{unit.y:.1f}) [partial: {actual_distance:.1f}/{distance_to_target:.1f}]")
+
+                    changes.append({
+                        "type": "move",
+                        "target": unit.id,
+                        "field": "position",
+                        "old_value": {"x": old_x, "y": old_y},
+                        "new_value": {"x": unit.x, "y": unit.y},
+                        "outcome": outcome,
+                        "target_requested": {"x": target_x, "y": target_y},
+                        "movement_cost": actual_distance,
+                        "max_movement": max_movement
+                    })
             else:
                 # No specific location - move forward by 1 cell towards enemy side
-                old_x, old_y = unit.x, unit.y
                 # Default: move forward (direction defined by scenario)
-                move_distance = 1
-                unit.x = min(49, unit.x + move_distance)
-                changes.append({
-                    "type": "move",
-                    "target": unit.id,
-                    "field": "position",
-                    "old_value": {"x": old_x, "y": old_y},
-                    "new_value": {"x": unit.x, "y": unit.y}
-                })
-                outcome = "success"
-                logger.info(f"[MOVE] {unit.name}: ({old_x:.1f},{old_y:.1f}) -> ({unit.x:.1f},{unit.y:.1f}) [default]")
+                old_x, old_y = unit.x, unit.y
+
+                # Calculate max movement points
+                max_movement = self._calculate_max_movement(unit)
+
+                if max_movement <= 0:
+                    logger.warning(f"[MOVE] {unit.name}: Cannot move - no movement points")
+                    outcome = "failed"
+                    changes.append({
+                        "type": "move_blocked",
+                        "target": unit.id,
+                        "reason": "no_movement_points",
+                        "message": "移動力がありません"
+                    })
+                else:
+                    # Default movement: move forward 1 cell
+                    move_distance = min(1, max_movement)
+
+                    # Get direction from scenario configuration
+                    direction = self._get_advance_direction(game, unit.side)
+                    dir_x = direction.get("x", 1)
+                    dir_y = direction.get("y", 0)
+
+                    new_x = unit.x + (move_distance * dir_x)
+                    new_y = unit.y + (move_distance * dir_y)
+                    new_x = max(0, min(game.map_width - 1, new_x))
+                    new_y = max(0, min(game.map_height - 1, new_y))
+
+                    unit.x = new_x
+                    unit.y = new_y
+                    outcome = "success"
+
+                    changes.append({
+                        "type": "move",
+                        "target": unit.id,
+                        "field": "position",
+                        "old_value": {"x": old_x, "y": old_y},
+                        "new_value": {"x": unit.x, "y": unit.y},
+                        "outcome": outcome,
+                        "movement_cost": move_distance,
+                        "max_movement": max_movement
+                    })
+                    logger.info(f"[MOVE] {unit.name}: ({old_x:.1f},{old_y:.1f}) -> ({unit.x:.1f},{unit.y:.1f}) [default]")
 
         elif order.order_type == OrderType.ATTACK:
             # Get target units from order
             target_ids = order.target_units or []
             target_units = []
+            invalid_target_ids = []
+            out_of_range_targets = []
+
+            # Validate target existence
             for tid in target_ids:
                 target = self.db.query(Unit).filter(Unit.id == tid).first()
                 if target:
                     target_units.append(target)
+                else:
+                    invalid_target_ids.append(tid)
+
+            # Log warnings for invalid targets
+            if invalid_target_ids:
+                logger.warning(f"[COMBAT] {unit.name}: Invalid target IDs: {invalid_target_ids}")
+                changes.append({
+                    "type": "warning",
+                    "target": unit.id,
+                    "field": "target_validation",
+                    "message": f"Invalid target IDs: {invalid_target_ids}",
+                    "code": "INVALID_TARGET"
+                })
+
+            # If no valid targets, fail the attack
+            if not target_units:
+                logger.warning(f"[COMBAT] {unit.name}: No valid targets for attack")
+                outcome = "failed"
+                changes.append({
+                    "type": "combat",
+                    "target": unit.id,
+                    "field": "status",
+                    "old_value": unit.status,
+                    "new_value": unit.status,
+                    "message": "No valid targets - attack failed"
+                })
+                return {
+                    "order_id": order.id,
+                    "outcome": outcome,
+                    "changes": changes
+                }
+
+            # Validate target range
+            attacker_profile = get_unit_profile(unit.unit_type)
+            max_attack_range = attacker_profile.max_range if attacker_profile else 10
+
+            for target in target_units:
+                distance = math.sqrt((unit.x - target.x)**2 + (unit.y - target.y)**2)
+                if distance > max_attack_range:
+                    out_of_range_targets.append({
+                        "id": target.id,
+                        "name": target.name,
+                        "distance": round(distance, 1),
+                        "max_range": max_attack_range
+                    })
+
+            if out_of_range_targets:
+                logger.warning(f"[COMBAT] {unit.name}: Out of range targets: {out_of_range_targets}")
+                changes.append({
+                    "type": "warning",
+                    "target": unit.id,
+                    "field": "range_validation",
+                    "message": f"Targets out of range: {[t['name'] for t in out_of_range_targets]}",
+                    "code": "OUT_OF_RANGE",
+                    "details": out_of_range_targets
+                })
 
             target_names = [t.name for t in target_units]
             logger.info(f"[COMBAT] {unit.name} attacks {target_names} (targets: {len(target_units)})")
@@ -476,6 +860,15 @@ class RuleEngine:
                         target.status = UnitStatus.HEAVY_DAMAGE
                     elif target.status == UnitStatus.MEDIUM_DAMAGE:
                         target.status = UnitStatus.DESTROYED
+                        # Report unit destroyed
+                        if target.side == "player":
+                            self.reporting_system.add_event("unit_destroyed", {
+                                "unit_id": target.id,
+                                "unit_name": target.name,
+                                "unit_type": target.unit_type,
+                                "priority": "high"
+                            })
+                            logger.info(f"[REPORTING] Player unit destroyed: {target.name}")
                     logger.info(f"[COMBAT] {target.name}: {old_status.value} -> {target.status.value}")
                 # Attacker takes no damage
             elif outcome == "success":
@@ -515,6 +908,15 @@ class RuleEngine:
                     unit.status = UnitStatus.HEAVY_DAMAGE
                 elif unit.status == UnitStatus.MEDIUM_DAMAGE:
                     unit.status = UnitStatus.DESTROYED
+                    # Report unit destroyed
+                    if unit.side == "player":
+                        self.reporting_system.add_event("unit_destroyed", {
+                            "unit_id": unit.id,
+                            "unit_name": unit.name,
+                            "unit_type": unit.unit_type,
+                            "priority": "high"
+                        })
+                        logger.info(f"[REPORTING] Player unit destroyed: {unit.name}")
 
             changes.append({
                 "type": "combat",
@@ -535,13 +937,29 @@ class RuleEngine:
             # Recon increases visibility
 
         elif order.order_type == OrderType.RETREAT:
-            # Move backwards and reduce status
-            unit.x = max(0, unit.x - 2)
+            # Move backwards (opposite of advance direction) and reduce status
+            old_x, old_y = unit.x, unit.y
+
+            # Get direction from scenario configuration (retreat is opposite of advance)
+            direction = self._get_advance_direction(game, unit.side)
+            dir_x = direction.get("x", 1)
+            dir_y = direction.get("y", 0)
+
+            # Retreat is the opposite direction of advance
+            retreat_distance = 2
+            new_x = unit.x - (retreat_distance * dir_x)
+            new_y = unit.y - (retreat_distance * dir_y)
+            new_x = max(0, min(game.map_width - 1, new_x))
+            new_y = max(0, min(game.map_height - 1, new_y))
+
+            unit.x = new_x
+            unit.y = new_y
+
             changes.append({
                 "type": "retreat",
                 "target": unit.id,
                 "field": "position",
-                "old_value": "previous",
+                "old_value": {"x": old_x, "y": old_y},
                 "new_value": {"x": unit.x, "y": unit.y}
             })
             outcome = "success"
@@ -638,6 +1056,8 @@ class RuleEngine:
         game = self.db.query(Game).filter(Game.id == game_id).first()
         weather = game.weather if game else "clear"
         time_str = game.current_time if game else "12:00"
+        map_width = getattr(game, 'map_width', 50)
+        map_height = getattr(game, 'map_height', 50)
 
         # Build occupancy grid to track occupied cells (for collision avoidance)
         occupied_cells = {}
@@ -779,8 +1199,8 @@ class RuleEngine:
                 dy *= scale
 
             # Apply movement with collision avoidance
-            new_x = max(0, min(50, unit.x + dx))
-            new_y = max(0, min(50, unit.y + dy))
+            new_x = max(0, min(map_width, unit.x + dx))
+            new_y = max(0, min(map_height, unit.y + dy))
 
             # Check if new position conflicts with other units
             # Try to find a nearby unoccupied cell
@@ -793,8 +1213,8 @@ class RuleEngine:
                     for offset_y in [-2, -1, 0, 1, 2]:
                         if offset_x == 0 and offset_y == 0:
                             continue
-                        test_x = max(0, min(50, new_x + offset_x))
-                        test_y = max(0, min(50, new_y + offset_y))
+                        test_x = max(0, min(map_width, new_x + offset_x))
+                        test_y = max(0, min(map_height, new_y + offset_y))
                         conflict_score = self._count_conflicts(test_x, test_y, occupied_cells, unit.id)
                         if conflict_score < min_conflict_score:
                             min_conflict_score = conflict_score
@@ -1027,6 +1447,60 @@ class RuleEngine:
             ]
         }
 
+    def _save_player_knowledge(self, game_id: int, enemy_unit: Unit) -> None:
+        """Save or update player knowledge about an enemy unit to PlayerKnowledge table.
+
+        This method persists observation data to PlayerKnowledge table for use in
+        the player view (Fog of War). It creates new entries or updates existing ones.
+        """
+        # Check if knowledge already exists for this unit
+        existing_knowledge = self.db.query(PlayerKnowledge).filter(
+            PlayerKnowledge.game_id == game_id,
+            PlayerKnowledge.unit_id == enemy_unit.id
+        ).first()
+
+        # Get observation data from the enemy unit
+        confidence = getattr(enemy_unit, 'observation_confidence', None)
+        confidence_score = getattr(enemy_unit, 'confidence_score', 0)
+        last_observed_turn = getattr(enemy_unit, 'last_observed_turn', None)
+        position_accuracy = getattr(enemy_unit, 'position_accuracy', 0)
+        last_known_type = getattr(enemy_unit, 'last_known_type', enemy_unit.unit_type)
+
+        if existing_knowledge:
+            # Update existing knowledge if we have a better observation
+            if confidence_score > existing_knowledge.confidence_score:
+                existing_knowledge.x = enemy_unit.x
+                existing_knowledge.y = enemy_unit.y
+                existing_knowledge.confidence = confidence
+                existing_knowledge.confidence_score = confidence_score
+                existing_knowledge.last_observed_turn = last_observed_turn
+                existing_knowledge.position_accuracy = position_accuracy
+                existing_knowledge.interpreted_type = last_known_type
+                existing_knowledge.interpreted_side = enemy_unit.side
+                logger.debug(f"[PlayerKnowledge] Updated knowledge for enemy unit {enemy_unit.id}: confidence={confidence}, score={confidence_score}")
+            else:
+                # Only update position if the observation is more recent and has reasonable confidence
+                if last_observed_turn and last_observed_turn > (existing_knowledge.last_observed_turn or 0):
+                    existing_knowledge.x = enemy_unit.x
+                    existing_knowledge.y = enemy_unit.y
+                    existing_knowledge.last_observed_turn = last_observed_turn
+        else:
+            # Create new knowledge entry
+            new_knowledge = PlayerKnowledge(
+                game_id=game_id,
+                unit_id=enemy_unit.id,
+                x=enemy_unit.x,
+                y=enemy_unit.y,
+                confidence=confidence or "unknown",
+                confidence_score=confidence_score or 0,
+                last_observed_turn=last_observed_turn,
+                position_accuracy=position_accuracy,
+                interpreted_type=last_known_type,
+                interpreted_side=enemy_unit.side
+            )
+            self.db.add(new_knowledge)
+            logger.debug(f"[PlayerKnowledge] Created new knowledge for enemy unit {enemy_unit.id}: confidence={confidence}, score={confidence_score}")
+
     def _process_reconnaissance(self, game_id: int) -> list:
         """Process reconnaissance - player units observe enemy positions
 
@@ -1168,6 +1642,18 @@ class RuleEngine:
 
                     logger.info(f"[RECON] {p_unit.name} observed {e_unit.name}: {confidence} ({confidence_score}%) at distance {distance:.1f}")
 
+                    # Add event to reporting system
+                    if distance <= 2.0:
+                        # Enemy in contact range - trigger reporting requirement
+                        self.reporting_system.add_event("enemy_contact", {
+                            "enemy_unit_id": e_unit.id,
+                            "enemy_name": e_unit.name,
+                            "observer_unit_id": p_unit.id,
+                            "distance": distance,
+                            "priority": "high" if distance <= 1.0 else "normal"
+                        })
+                        logger.info(f"[REPORTING] Enemy contact detected: {e_unit.name} at distance {distance:.1f}")
+
                     events.append({
                         "type": "enemy_observed",
                         "enemy_unit_id": e_unit.id,
@@ -1226,6 +1712,9 @@ class RuleEngine:
                     # Downgrade confidence level
                     if decayed_score < 30:
                         setattr(e_unit, 'observation_confidence', 'unknown')
+
+                # Save to PlayerKnowledge table for player view
+                self._save_player_knowledge(game_id, e_unit)
 
         self.db.commit()
 

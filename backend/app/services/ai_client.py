@@ -33,14 +33,14 @@ Order types: move, attack, defend, support, retreat, recon, supply, special
 Output ONLY valid JSON (no markdown, no explanation):
 {{
   "order_type": "move|attack|defend|support|retreat|recon|supply|special",
-  "target_units": [1, 2, 3],  # Use unit IDs (integers) only
+  "target_units": ["unit_id_1", "unit_id_2"],  # Use unit IDs (strings) only
   "intent": "what the player wants to accomplish",
   "location": {{"x": 0-50, "y": 0-50, "area_name": "optional"}},
   "parameters": {{"priority": "high|normal|low"}},
   "assumptions": ["any ambiguities assumed"]
 }}
 
-IMPORTANT: target_units must be a list of unit IDs (integers), NOT unit names. Do NOT use unit names."""
+IMPORTANT: target_units must be a list of unit IDs (strings), NOT unit names. Do NOT use unit names."""
 
         try:
             async with httpx.AsyncClient() as client:

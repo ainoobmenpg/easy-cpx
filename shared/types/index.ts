@@ -1,3 +1,19 @@
+// Unit Type Enum - unified vocabulary for all unit types
+export type UnitType =
+  | 'armor'
+  | 'infantry'
+  | 'atgm'
+  | 'sniper'
+  | 'scout'
+  | 'artillery'
+  | 'air_defense'
+  | 'attack_helo'
+  | 'transport_helo'
+  | 'aircraft'
+  | 'uav'
+  | 'recon'
+  | 'support';
+
 // Order Parser Types
 export type OrderType = 'move' | 'attack' | 'defend' | 'support' | 'retreat' | 'recon' | 'supply' | 'special';
 

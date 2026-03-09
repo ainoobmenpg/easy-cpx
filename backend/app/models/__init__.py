@@ -8,6 +8,135 @@ import enum
 Base = declarative_base()
 
 
+# Unit Type Enum - unified vocabulary
+class UnitType(enum.Enum):
+    ARMOR = "armor"
+    INFANTRY = "infantry"
+    ATGM = "atgm"
+    SNIPER = "sniper"
+    SCOUT = "scout"
+    ARTILLERY = "artillery"
+    AIR_DEFENSE = "air_defense"
+    ATTACK_HELO = "attack_helo"
+    TRANSPORT_HELO = "transport_helo"
+    AIRCRAFT = "aircraft"
+    UAV = "uav"
+    RECON = "recon"
+    SUPPORT = "support"
+
+
+# Mapping from legacy unit type strings to UnitType
+LEGACY_UNIT_TYPE_MAP: dict[str, UnitType] = {
+    # NATO prefixes
+    "nato_armor": UnitType.ARMOR,
+    "nato_infantry": UnitType.INFANTRY,
+    "nato_atgm": UnitType.ATGM,
+    "nato_artillery": UnitType.ARTILLERY,
+    "nato_air_defense": UnitType.AIR_DEFENSE,
+    "nato_recon": UnitType.RECON,
+    "nato_uav": UnitType.UAV,
+    "nato_aircraft": UnitType.AIRCRAFT,
+    "nato_attack_helo": UnitType.ATTACK_HELO,
+    "nato_transport_helo": UnitType.TRANSPORT_HELO,
+    "nato_support": UnitType.SUPPORT,
+    # WP prefixes
+    "wp_armor": UnitType.ARMOR,
+    "wp_infantry": UnitType.INFANTRY,
+    "wp_atgm": UnitType.ATGM,
+    "wp_artillery": UnitType.ARTILLERY,
+    "wp_air_defense": UnitType.AIR_DEFENSE,
+    "wp_recon": UnitType.RECON,
+    "wp_uav": UnitType.UAV,
+    "wp_aircraft": UnitType.AIRCRAFT,
+    "wp_attack_helo": UnitType.ATTACK_HELO,
+    "wp_transport_helo": UnitType.TRANSPORT_HELO,
+    "wp_support": UnitType.SUPPORT,
+    # Direct mappings
+    "armor": UnitType.ARMOR,
+    "tank": UnitType.ARMOR,
+    "infantry": UnitType.INFANTRY,
+    "inf": UnitType.INFANTRY,
+    "atgm": UnitType.ATGM,
+    "anti-tank": UnitType.ATGM,
+    "sniper": UnitType.SNIPER,
+    "scout": UnitType.SCOUT,
+    "artillery": UnitType.ARTILLERY,
+    "howitzer": UnitType.ARTILLERY,
+    "mlrs": UnitType.ARTILLERY,
+    "air_defense": UnitType.AIR_DEFENSE,
+    "sam": UnitType.AIR_DEFENSE,
+    "patriot": UnitType.AIR_DEFENSE,
+    "flak": UnitType.AIR_DEFENSE,
+    "attack_helo": UnitType.ATTACK_HELO,
+    "apache": UnitType.ATTACK_HELO,
+    "hind": UnitType.ATTACK_HELO,
+    "transport_helo": UnitType.TRANSPORT_HELO,
+    "blackhawk": UnitType.TRANSPORT_HELO,
+    "mi17": UnitType.TRANSPORT_HELO,
+    "aircraft": UnitType.AIRCRAFT,
+    "fighter": UnitType.AIRCRAFT,
+    "uav": UnitType.UAV,
+    "drone": UnitType.UAV,
+    "recon": UnitType.RECON,
+    "support": UnitType.SUPPORT,
+    "supply": UnitType.SUPPORT,
+}
+
+
+def normalize_unit_type(unit_type: str) -> str:
+    """Normalize any unit type string to canonical form"""
+    if not unit_type:
+        return "infantry"  # Default fallback
+
+    unit_type_lower = unit_type.lower()
+
+    # Check exact match in legacy map
+    if unit_type_lower in LEGACY_UNIT_TYPE_MAP:
+        return LEGACY_UNIT_TYPE_MAP[unit_type_lower].value
+
+    # Try partial matching for specific weapons (check longer patterns first)
+    # Artillery first (m109, pzh2000 are self-propelled artillery)
+    if "m109" in unit_type_lower or "pzh" in unit_type_lower or "howitzer" in unit_type_lower or \
+       "mlrs" in unit_type_lower or "grad" in unit_type_lower:
+        return UnitType.ARTILLERY.value
+
+    # Aircraft types
+    if "aircraft" in unit_type_lower or "fighter" in unit_type_lower or "f15" in unit_type_lower or \
+       "f16" in unit_type_lower or "mig" in unit_type_lower or "tornado" in unit_type_lower or \
+       "su25" in unit_type_lower or "f4" in unit_type_lower or "f5" in unit_type_lower:
+        return UnitType.AIRCRAFT.value
+
+    # UAV types
+    if "uav" in unit_type_lower or "drone" in unit_type_lower or "reaper" in unit_type_lower or \
+       "shadow" in unit_type_lower or "forpost" in unit_type_lower:
+        return UnitType.UAV.value
+
+    # Attack helicopter
+    if "attack" in unit_type_lower and "helo" in unit_type_lower or "apache" in unit_type_lower or \
+       "hind" in unit_type_lower:
+        return UnitType.ATTACK_HELO.value
+
+    # Transport helicopter
+    if "transport" in unit_type_lower and "helo" in unit_type_lower or "blackhawk" in unit_type_lower or \
+       "mi17" in unit_type_lower or "hip" in unit_type_lower:
+        return UnitType.TRANSPORT_HELO.value
+
+    # Air defense
+    if "air_defense" in unit_type_lower or "sam" in unit_type_lower or "patriot" in unit_type_lower or \
+       "flak" in unit_type_lower or "gepard" in unit_type_lower or "stinger" in unit_type_lower or \
+       "sa6" in unit_type_lower or "sa11" in unit_type_lower:
+        return UnitType.AIR_DEFENSE.value
+
+    # Armor (check after artillery since some have "tank" but also numbers)
+    if "tank" in unit_type_lower or "m1" in unit_type_lower or "leopard" in unit_type_lower or \
+       "t72" in unit_type_lower or "t80" in unit_type_lower or "bradley" in unit_type_lower or \
+       "bmp" in unit_type_lower or "marder" in unit_type_lower:
+        return UnitType.ARMOR.value
+
+    # Default to infantry
+    return UnitType.INFANTRY.value
+
+
 class UnitStatus(enum.Enum):
     INTACT = "intact"
     LIGHT_DAMAGE = "light_damage"
@@ -168,6 +297,7 @@ class Turn(Base):
     # AI generated content
     sitrep = Column(JSON)
     excon_orders = Column(JSON)
+    enemy_results = Column(JSON)  # Enemy AI decision results
 
     game = relationship("Game", back_populates="turns")
     orders = relationship("Order", back_populates="turn")

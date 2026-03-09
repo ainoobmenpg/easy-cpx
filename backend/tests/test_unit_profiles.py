@@ -4,10 +4,10 @@ import pytest
 from app.data.unit_profiles import (
     get_unit_profile,
     get_compatibility_bonus,
-    _normalize_unit_type,
     UNIT_BEHAVIOR_PROFILES,
     UnitBehaviorProfile,
 )
+from app.models import normalize_unit_type
 
 
 class TestGetUnitProfile:
@@ -99,9 +99,10 @@ class TestGetUnitProfile:
         assert profile.stay_rear is True
 
     def test_get_default_profile(self):
+        # Unknown types fall back to infantry profile
         profile = get_unit_profile("unknown_type")
         assert isinstance(profile, UnitBehaviorProfile)
-        assert profile.preferred_range == 2
+        assert profile.preferred_range == 1
         assert profile.should_advance is True
 
     def test_case_insensitive(self):
@@ -165,12 +166,14 @@ class TestGetCompatibilityBonus:
         assert bonus == 0.2
 
     def test_unknown_attacker(self):
+        # Unknown maps to infantry
         bonus = get_compatibility_bonus("unknown", "armor")
-        assert bonus == 0.0
+        assert bonus == -0.3
 
     def test_unknown_defender(self):
+        # Unknown maps to infantry
         bonus = get_compatibility_bonus("armor", "unknown")
-        assert bonus == 0.0
+        assert bonus == 0.3
 
     def test_case_insensitive_compatibility(self):
         bonus1 = get_compatibility_bonus("ARMOR", "INFANTRY")
@@ -184,71 +187,82 @@ class TestGetCompatibilityBonus:
 
 
 class TestNormalizeUnitType:
-    """Tests for _normalize_unit_type function"""
+    """Tests for normalize_unit_type function"""
 
     def test_normalize_tank(self):
-        assert _normalize_unit_type("tank") == "armor"
-        assert _normalize_unit_type("m1_abrams") == "armor"
-        assert _normalize_unit_type("leopard") == "armor"
-        assert _normalize_unit_type("t72") == "armor"
-        assert _normalize_unit_type("bradley") == "armor"
+        assert normalize_unit_type("tank") == "armor"
+        assert normalize_unit_type("m1_abrams") == "armor"
+        assert normalize_unit_type("leopard") == "armor"
+        assert normalize_unit_type("t72") == "armor"
+        assert normalize_unit_type("bradley") == "armor"
 
     def test_normalize_atgm(self):
-        assert _normalize_unit_type("atgm") == "atgm"
-        # Note: "anti-tank" contains "tank", so returns "armor"
-        assert _normalize_unit_type("anti-tank") == "armor"
+        assert normalize_unit_type("atgm") == "atgm"
+        # anti-tank should map to atgm
+        assert normalize_unit_type("anti-tank") == "atgm"
 
     def test_normalize_infantry(self):
-        assert _normalize_unit_type("infantry") == "infantry"
-        assert _normalize_unit_type("inf") == "infantry"
+        assert normalize_unit_type("infantry") == "infantry"
+        assert normalize_unit_type("inf") == "infantry"
 
     def test_normalize_artillery(self):
-        assert _normalize_unit_type("artillery") == "artillery"
-        assert _normalize_unit_type("howitzer") == "artillery"
-        assert _normalize_unit_type("mlrs") == "artillery"
-        # Note: "m109" contains "m1", so returns "armor"
-        assert _normalize_unit_type("m109") == "armor"
+        assert normalize_unit_type("artillery") == "artillery"
+        assert normalize_unit_type("howitzer") == "artillery"
+        assert normalize_unit_type("mlrs") == "artillery"
+        # m109 is a self-propelled howitzer (artillery)
+        assert normalize_unit_type("m109") == "artillery"
 
     def test_normalize_air_defense(self):
-        assert _normalize_unit_type("air_defense") == "air_defense"
-        assert _normalize_unit_type("sam") == "air_defense"
-        assert _normalize_unit_type("patriot") == "air_defense"
-        assert _normalize_unit_type("flak") == "air_defense"
+        assert normalize_unit_type("air_defense") == "air_defense"
+        assert normalize_unit_type("sam") == "air_defense"
+        assert normalize_unit_type("patriot") == "air_defense"
+        assert normalize_unit_type("flak") == "air_defense"
 
     def test_normalize_attack_helo(self):
-        assert _normalize_unit_type("attack_helo") == "attack_helo"
-        assert _normalize_unit_type("apache") == "attack_helo"
-        assert _normalize_unit_type("hind") == "attack_helo"
+        assert normalize_unit_type("attack_helo") == "attack_helo"
+        assert normalize_unit_type("apache") == "attack_helo"
+        assert normalize_unit_type("hind") == "attack_helo"
 
     def test_normalize_transport_helo(self):
-        assert _normalize_unit_type("transport_helo") == "transport_helo"
-        assert _normalize_unit_type("blackhawk") == "transport_helo"
+        assert normalize_unit_type("transport_helo") == "transport_helo"
+        assert normalize_unit_type("blackhawk") == "transport_helo"
 
     def test_normalize_aircraft(self):
-        assert _normalize_unit_type("aircraft") == "aircraft"
-        assert _normalize_unit_type("fighter") == "aircraft"
-        assert _normalize_unit_type("f15") == "aircraft"
-        assert _normalize_unit_type("f16") == "aircraft"
+        assert normalize_unit_type("aircraft") == "aircraft"
+        assert normalize_unit_type("fighter") == "aircraft"
+        assert normalize_unit_type("f15") == "aircraft"
+        assert normalize_unit_type("f16") == "aircraft"
 
     def test_normalize_uav(self):
-        assert _normalize_unit_type("uav") == "uav"
-        assert _normalize_unit_type("drone") == "uav"
-        assert _normalize_unit_type("reaper") == "uav"
+        assert normalize_unit_type("uav") == "uav"
+        assert normalize_unit_type("drone") == "uav"
+        assert normalize_unit_type("reaper") == "uav"
 
     def test_normalize_recon(self):
-        assert _normalize_unit_type("recon") == "recon"
+        assert normalize_unit_type("recon") == "recon"
 
     def test_normalize_support(self):
-        assert _normalize_unit_type("support") == "support"
-        assert _normalize_unit_type("supply") == "support"
+        assert normalize_unit_type("support") == "support"
+        assert normalize_unit_type("supply") == "support"
 
     def test_normalize_default(self):
-        assert _normalize_unit_type("unknown_type") == "default"
-        assert _normalize_unit_type("medical") == "default"
+        # Unknown types fall back to infantry
+        assert normalize_unit_type("unknown_type") == "infantry"
+        assert normalize_unit_type("medical") == "infantry"
 
     def test_normalize_case_insensitive(self):
-        assert _normalize_unit_type("ARMOR") == "armor"
-        assert _normalize_unit_type("TANK") == "armor"
+        assert normalize_unit_type("ARMOR") == "armor"
+        assert normalize_unit_type("TANK") == "armor"
+
+    def test_normalize_legacy_nato_prefix(self):
+        assert normalize_unit_type("nato_armor") == "armor"
+        assert normalize_unit_type("nato_infantry") == "infantry"
+        assert normalize_unit_type("nato_artillery") == "artillery"
+
+    def test_normalize_legacy_wp_prefix(self):
+        assert normalize_unit_type("wp_armor") == "armor"
+        assert normalize_unit_type("wp_infantry") == "infantry"
+        assert normalize_unit_type("wp_artillery") == "artillery"
 
 
 class TestUnitBehaviorProfile:

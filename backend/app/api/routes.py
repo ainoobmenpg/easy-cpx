@@ -1,12 +1,14 @@
 # Game API Routes
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Path
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
+from typing import Literal
 from typing import Optional, List
 from app.database import get_db
-from app.models import Game, Unit, Turn, Order, OrderType, PlayerKnowledge
+from app.models import Game, Unit, Turn, Order, OrderType, PlayerKnowledge, Event
 from app.services.adjudication import RuleEngine
 from app.services.ai_client import AIClient
+from app.services.game_state_service import get_game_state_with_fow
 from app.services.scenario_manager import ScenarioManager
 from app.services.debriefing import DebriefingGenerator
 import asyncio
@@ -16,10 +18,29 @@ router = APIRouter()
 
 # Pydantic schemas for request bodies
 class GameCreate(BaseModel):
-    name: str
+    name: str = Field(..., min_length=1, max_length=100)
 
 
 # Game endpoints
+@router.get("/games/")
+def list_games(db: Session = Depends(get_db)):
+    """List all games"""
+    games = db.query(Game).all()
+    return [
+        {
+            "id": game.id,
+            "name": game.name,
+            "current_turn": game.current_turn,
+            "current_date": game.current_date,
+            "current_time": game.current_time,
+            "weather": game.weather,
+            "phase": game.phase,
+            "is_active": game.is_active
+        }
+        for game in games
+    ]
+
+
 @router.post("/games/")
 def create_game(request: GameCreate, db: Session = Depends(get_db)):
     """Create a new game"""
@@ -48,10 +69,14 @@ def get_game(game_id: int, db: Session = Depends(get_db)):
         "id": game.id,
         "name": game.name,
         "current_turn": game.current_turn,
+        "current_date": game.current_date,
         "current_time": game.current_time,
         "weather": game.weather,
         "phase": game.phase,
-        "is_active": game.is_active
+        "is_active": game.is_active,
+        "terrain_data": game.terrain_data,
+        "map_width": game.map_width,
+        "map_height": game.map_height,
     }
 
 
@@ -82,12 +107,12 @@ def get_game_units(game_id: int, db: Session = Depends(get_db)):
 
 @router.post("/games/{game_id}/units/")
 def create_unit(
-    game_id: int,
-    name: str,
-    unit_type: str,
-    side: str,
-    x: float,
-    y: float,
+    game_id: int = Path(..., gt=0),
+    name: str = Query(..., min_length=1, max_length=100),
+    unit_type: str = Query(..., min_length=1, max_length=50),
+    side: str = Query(..., pattern="^(player|enemy)$"),
+    x: float = Query(..., ge=0, le=100),
+    y: float = Query(..., ge=0, le=100),
     db: Session = Depends(get_db)
 ):
     """Create a new unit"""
@@ -110,23 +135,32 @@ def create_unit(
 
 # Pydantic schemas
 class OrderCreate(BaseModel):
-    unit_id: int
-    order_type: str
+    unit_id: int = Field(..., gt=0)
+    order_type: Literal["move", "attack", "defend", "support", "retreat", "recon", "supply", "special"]
     target_units: Optional[List[int]] = None
-    intent: str
-    location_x: Optional[float] = None
-    location_y: Optional[float] = None
-    location_name: Optional[str] = None
-    priority: Optional[str] = "normal"
+    intent: str = Field(..., min_length=1, max_length=1000)
+    location_x: Optional[float] = Field(None, ge=0, le=100)
+    location_y: Optional[float] = Field(None, ge=0, le=100)
+    location_name: Optional[str] = Field(None, max_length=100)
+    priority: Literal["high", "normal", "low"] = "normal"
+
+    @field_validator("target_units")
+    @classmethod
+    def target_units_positive(cls, v):
+        if v is not None:
+            for item in v:
+                if item <= 0:
+                    raise ValueError("target unit ID must be positive")
+        return v
 
 
 class OrderParseRequest(BaseModel):
-    player_input: str
-    game_id: int
+    player_input: str = Field(..., min_length=1, max_length=2000)
+    game_id: int = Field(..., gt=0)
 
 
 class TurnAdvanceRequest(BaseModel):
-    game_id: int
+    game_id: int = Field(..., gt=0)
 
 
 @router.post("/parse-order")
@@ -239,6 +273,18 @@ async def advance_turn(request: TurnAdvanceRequest, db: Session = Depends(get_db
     if turn:
         turn.sitrep = sitrep
         turn.excon_orders = excon_orders
+        turn.enemy_results = enemy_results  # Save enemy AI decisions
+
+        # Save enemy results to Event table for historical tracking
+        for enemy_result in enemy_results:
+            event = Event(
+                turn_id=turn.id,
+                event_type="enemy_action",
+                data=enemy_result,
+                description=enemy_result.get("unit_name", "Enemy unit") + " - " + enemy_result.get("outcome", "unknown")
+            )
+            db.add(event)
+
         db.commit()
 
     return {
@@ -254,73 +300,17 @@ async def advance_turn(request: TurnAdvanceRequest, db: Session = Depends(get_db
 @router.get("/game/{game_id}/state")
 def get_game_state(game_id: int, db: Session = Depends(get_db)):
     """Get current game state with Fog of War applied"""
+    # Validate game exists
     game = db.query(Game).filter(Game.id == game_id).first()
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
 
+    # Get internal engine state (contains full truth)
     engine = RuleEngine(db)
-    state = engine.get_game_state(game_id)
+    engine_state = engine.get_game_state(game_id)
 
-    # Apply Fog of War - filter enemy units based on player knowledge
-    player_knowledge = db.query(PlayerKnowledge).filter(
-        PlayerKnowledge.game_id == game_id
-    ).all()
-
-    # Build a map of known enemy units
-    known_enemies = {}
-    for pk in player_knowledge:
-        if pk.unit_id:
-            known_enemies[pk.unit_id] = {
-                "x": pk.x,
-                "y": pk.y,
-                "confidence": pk.confidence,
-                "confidence_score": pk.confidence_score,
-                "last_observed_turn": pk.last_observed_turn,
-                "interpreted_type": pk.interpreted_type,
-                "position_accuracy": pk.position_accuracy
-            }
-
-    # Filter units - player units are fully visible, enemy units are filtered
-    filtered_units = []
-    for unit in state.get("units", []):
-        if unit["side"] == "player":
-            # Player units are fully visible
-            filtered_units.append({
-                **unit,
-                "is_observed": True,
-                "observation_confidence": "confirmed"
-            })
-        else:
-            # Enemy units - check if observed
-            known = known_enemies.get(unit["id"])
-            if known:
-                # Enemy is observed - return with knowledge
-                filtered_units.append({
-                    **unit,
-                    "x": known["x"],  # Use observed position
-                    "y": known["y"],
-                    "is_observed": True,
-                    "observation_confidence": known["confidence"],
-                    "confidence_score": known["confidence_score"],
-                    "last_observed_turn": known["last_observed_turn"],
-                    "last_known_type": known.get("interpreted_type"),
-                    "position_accuracy": known.get("position_accuracy", 0)
-                })
-            else:
-                # Enemy not observed - hide true position
-                filtered_units.append({
-                    **unit,
-                    "x": None,
-                    "y": None,
-                    "is_observed": False,
-                    "observation_confidence": "unknown",
-                    "confidence_score": 0,
-                    "last_observed_turn": None,
-                    "status": "unknown"
-                })
-
-    state["units"] = filtered_units
-    return state
+    # Apply Fog of War and build response (separated concern)
+    return get_game_state_with_fow(db, game_id, engine_state)
 
 
 @router.get("/game/{game_id}/sitrep")
@@ -343,8 +333,8 @@ def get_sitrep(game_id: int, turn: int = None, db: Session = Depends(get_db)):
 
 
 class MoveUnitRequest(BaseModel):
-    x: float
-    y: float
+    x: float = Field(..., ge=0, le=100)
+    y: float = Field(..., ge=0, le=100)
 
 
 @router.post("/units/{unit_id}/move")
@@ -382,8 +372,8 @@ def get_scenario(scenario_id: str):
 
 
 class GameStartRequest(BaseModel):
-    scenario_id: str
-    game_name: str
+    scenario_id: str = Field(..., min_length=1, max_length=100)
+    game_name: str = Field(..., min_length=1, max_length=100)
 
 
 @router.post("/game/start")
@@ -414,7 +404,7 @@ async def get_debriefing(game_id: int, db: Session = Depends(get_db)):
 
 
 class EndGameRequest(BaseModel):
-    game_id: int
+    game_id: int = Field(..., gt=0)
 
 
 @router.post("/game/end")

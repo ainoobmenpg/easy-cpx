@@ -83,14 +83,21 @@ Operational CPX is a full-stack web application with a Python backend and Next.j
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/games` | GET | List games |
 | `/api/games/` | POST | Create game |
-| `/api/game/{id}/state` | GET | Get game state |
-| `/api/game/{id}/units` | GET | Get units |
-| `/api/parse-order` | POST | Parse player order |
+| `/api/games/{game_id}` | GET | Get game by ID |
+| `/api/games/{game_id}/units` | GET | Get all units for a game |
+| `/api/games/{game_id}/units/` | POST | Create unit for a game |
+| `/api/parse-order` | POST | Parse player order (AI) |
 | `/api/orders/` | POST | Submit order |
 | `/api/advance-turn` | POST | Process turn |
-| `/api/game/{id}/sitrep` | GET | Get SITREP |
+| `/api/game/{game_id}/state` | GET | Get game state (Fog of War applied) |
+| `/api/game/{game_id}/sitrep` | GET | Get SITREP |
+| `/api/game/{game_id}/debriefing` | Get game debriefing |
+| `/api/game/start` | POST | Start new game with scenario |
+| `/api/game/end` | POST | End game |
+| `/api/units/{unit_id}/move` | POST | Move unit |
+| `/api/scenarios` | GET | List scenarios |
+| `/api/scenarios/{scenario_id}` | GET | Get scenario details |
 
 ## Data Models
 

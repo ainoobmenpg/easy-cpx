@@ -19,10 +19,10 @@ class DeploymentZone(Enum):
 class InitialSetupService:
     """Service for managing initial deployment and game setup"""
 
-    # Israel Northern Command scenario (March 2026)
-    DEFAULT_START_DATE = "2026-03-06"  # Israel 2026 scenario
-    DEFAULT_START_TIME = "05:40"  # Dawn, pre-dawn operation
-    DEFAULT_SCENARIO_DURATION_HOURS = 72  # 3 days
+    # Default values (used when no scenario is provided)
+    DEFAULT_START_DATE = "2026-03-06"
+    DEFAULT_START_TIME = "05:40"
+    DEFAULT_SCENARIO_DURATION_HOURS = 72
 
     # Time progression per turn (minutes)
     TIME_ADVANCE_NORMAL = 15
@@ -33,12 +33,33 @@ class InitialSetupService:
         if random_seed is not None:
             random.seed(random_seed)
 
-    def initialize_game_date(self, start_date: str = None, start_time: str = None) -> dict:
-        """Initialize game date and time"""
+    def initialize_game_date(
+        self,
+        start_date: str = None,
+        start_time: str = None,
+        scenario: dict = None
+    ) -> dict:
+        """Initialize game date and time
+
+        Args:
+            start_date: Override start date (YYYY-MM-DD)
+            start_time: Override start time (HH:MM)
+            scenario: Scenario dictionary with start_date, start_time, scenario_duration_hours
+        """
+        # Use scenario values if provided, otherwise use defaults or overrides
+        if scenario:
+            date = start_date or scenario.get("start_date", self.DEFAULT_START_DATE)
+            time = start_time or scenario.get("start_time", self.DEFAULT_START_TIME)
+            duration = scenario.get("scenario_duration_hours", self.DEFAULT_SCENARIO_DURATION_HOURS)
+        else:
+            date = start_date or self.DEFAULT_START_DATE
+            time = start_time or self.DEFAULT_START_TIME
+            duration = self.DEFAULT_SCENARIO_DURATION_HOURS
+
         return {
-            "date": start_date or self.DEFAULT_START_DATE,
-            "time": start_time or self.DEFAULT_START_TIME,
-            "scenario_duration_hours": self.DEFAULT_SCENARIO_DURATION_HOURS,
+            "date": date,
+            "time": time,
+            "scenario_duration_hours": duration,
         }
 
     def calculate_turn_time_advance(self, turn_type: str = "normal") -> int:
@@ -74,11 +95,18 @@ class InitialSetupService:
         self,
         map_width: float,
         map_height: float,
-        side: str = "player"
+        side: str = "player",
+        scenario: dict = None
     ) -> list:
-        """Create initial player deployment for Israel 2026 scenario
+        """Create initial player deployment
 
-        Player units deployed along northern border (X: 5-15, Y: 25-35)
+        Deployment zone is determined by scenario or defaults to defensive positions.
+
+        Args:
+            map_width: Width of the map
+            map_height: Height of the map
+            side: "player" or "enemy"
+            scenario: Scenario dictionary with deployment configuration
         """
         units = []
 
@@ -206,11 +234,18 @@ class InitialSetupService:
         self,
         map_width: float,
         map_height: float,
-        side: str = "player"
+        side: str = "player",
+        scenario: dict = None
     ) -> list:
         """Create UAV units for modern scenarios
 
         UAVs provide large reconnaissance coverage but have no combat capability
+
+        Args:
+            map_width: Width of the map
+            map_height: Height of the map
+            side: "player" or "enemy"
+            scenario: Scenario dictionary for scenario-based configuration
         """
         units = []
 
@@ -278,12 +313,18 @@ class InitialSetupService:
         self,
         map_width: float,
         map_height: float,
-        reveal_level: int = 0
+        reveal_level: int = 0,
+        scenario: dict = None
     ) -> list:
-        """Create enemy deployment with concealment rules for Israel 2026
+        """Create enemy deployment with concealment rules
 
-        Enemy (Lebanon-based forces): X: 25-40, Y: 20-35
-        reveal_level: 0-100, how much info is available to player
+        Enemy deployment zone is based on scenario or defaults to standard positions.
+
+        Args:
+            map_width: Width of the map
+            map_height: Height of the map
+            reveal_level: 0-100, how much info is available to player
+            scenario: Scenario dictionary with deployment configuration
         """
         units = []
 
@@ -422,24 +463,30 @@ class InitialSetupService:
 
         return intel_reports
 
-    def create_initial_weather(self) -> dict:
-        """Generate initial weather conditions"""
-        weather_types = [
-            "clear",
-            "light_rain",
-            "heavy_rain",
-            "fog",
-            "overcast",
-        ]
+    def create_initial_weather(self, scenario: dict = None) -> dict:
+        """Generate initial weather conditions
 
-        # Winter scenario -倾向 to fog and overcast
-        weights = [0.2, 0.2, 0.1, 0.3, 0.2]
-
-        weather = random.choices(weather_types, weights=weights)[0]
+        Args:
+            scenario: Scenario dictionary with initial_weather override
+        """
+        # Use scenario weather if specified
+        if scenario and scenario.get("initial_weather"):
+            weather = scenario["initial_weather"]
+        else:
+            weather_types = [
+                "clear",
+                "light_rain",
+                "heavy_rain",
+                "fog",
+                "overcast",
+            ]
+            # Default weights - slight bias to fog and overcast
+            weights = [0.2, 0.2, 0.1, 0.3, 0.2]
+            weather = random.choices(weather_types, weights=weights)[0]
 
         return {
             "type": weather,
-            "temperature": random.randint(-5, 10),  # Celsius, November
+            "temperature": random.randint(-5, 10),
             "visibility_km": {
                 "clear": 20,
                 "light_rain": 10,
@@ -461,7 +508,8 @@ class InitialSetupService:
         map_height: float = 50,
         reveal_level: int = 0,
         intel_level: int = 20,
-        include_uav: bool = True
+        include_uav: bool = True,
+        scenario: dict = None
     ) -> dict:
         """Complete game setup
 
@@ -471,9 +519,10 @@ class InitialSetupService:
             reveal_level: 0-100, how much enemy info is available
             intel_level: 0-100, player's initial intel quality
             include_uav: Whether to include UAV units (modern scenario)
+            scenario: Scenario dictionary for scenario-based configuration
         """
-        # Initialize date/time
-        date_time = self.initialize_game_date()
+        # Initialize date/time (scenario-aware)
+        date_time = self.initialize_game_date(scenario=scenario)
 
         # Create deployments
         player_units = self.create_player_deployment(map_width, map_height, "player")
@@ -489,8 +538,8 @@ class InitialSetupService:
         # Generate initial intel
         initial_intel = self.generate_initial_intel(enemy_units, intel_level)
 
-        # Generate initial weather
-        weather = self.create_initial_weather()
+        # Generate initial weather (scenario-aware)
+        weather = self.create_initial_weather(scenario)
 
         return {
             "date_time": date_time,

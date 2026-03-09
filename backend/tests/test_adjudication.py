@@ -33,8 +33,11 @@ class TestRuleEngine:
         assert result["turn"] == 1
 
     def test_adjudicate_order_move(self, db_session, sample_game, player_units, sample_turn):
-        """Test MOVE order"""
+        """Test MOVE order - target beyond movement range should result in partial movement"""
         engine = RuleEngine(db_session)
+
+        original_x = player_units[0].x
+        original_y = player_units[0].y
 
         order = Order(
             game_id=sample_game.id,
@@ -50,8 +53,12 @@ class TestRuleEngine:
 
         result = engine._adjudicate_order(order)
 
-        assert result["outcome"] == "success"
+        # Target is 15 cells away, but max movement is ~3 cells
+        # Should result in partial movement
+        assert result["outcome"] in ["success", "partial"]
         assert len(result["changes"]) > 0
+        # Verify unit moved at least some distance towards target
+        assert player_units[0].x > original_x or player_units[0].y != original_y
 
     def test_adjudicate_order_move_no_location(self, db_session, sample_game, player_units, sample_turn):
         """Test MOVE order without specific location - default movement"""
@@ -1737,3 +1744,55 @@ class TestRuleEngine:
         )
 
         assert "readiness_bonus" in results
+
+    def test_attack_with_invalid_target(self, db_session, sample_game, player_units, sample_turn):
+        """Test attack with non-existent target returns failed outcome"""
+        engine = RuleEngine(db_session)
+
+        # Use a non-existent target ID (99999)
+        order = Order(
+            game_id=sample_game.id,
+            unit_id=player_units[0].id,
+            turn_id=sample_turn.id,
+            order_type=OrderType.ATTACK,
+            intent="Attack non-existent target",
+            target_units=[99999]
+        )
+        db_session.add(order)
+        db_session.commit()
+
+        result = engine._adjudicate_order(order)
+
+        assert result["outcome"] == "failed"
+        # Should have warning about invalid target
+        warnings = [c for c in result["changes"] if c.get("type") == "warning" and c.get("code") == "INVALID_TARGET"]
+        assert len(warnings) > 0
+
+    def test_attack_with_out_of_range_target(self, db_session, sample_game, player_units, enemy_units, sample_turn):
+        """Test attack with out-of-range target adds warning"""
+        engine = RuleEngine(db_session)
+
+        # Place enemy far away (beyond max range of typical unit)
+        enemy_units[0].x = 30
+        enemy_units[0].y = 30
+
+        # Player unit at origin
+        player_units[0].x = 0
+        player_units[0].y = 0
+
+        order = Order(
+            game_id=sample_game.id,
+            unit_id=player_units[0].id,
+            turn_id=sample_turn.id,
+            order_type=OrderType.ATTACK,
+            intent="Attack far target",
+            target_units=[enemy_units[0].id]
+        )
+        db_session.add(order)
+        db_session.commit()
+
+        result = engine._adjudicate_order(order)
+
+        # Should have warning about out of range
+        warnings = [c for c in result["changes"] if c.get("type") == "warning" and c.get("code") == "OUT_OF_RANGE"]
+        assert len(warnings) > 0

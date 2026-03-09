@@ -40,7 +40,11 @@
     ],
     "initial_weather": "clear",
     "start_date": "2026-03-06",
-    "start_time": "05:40"
+    "start_time": "05:40",
+    "advance_directions": {
+      "player": {"x": 1, "y": 0},
+      "enemy": {"x": -1, "y": 0}
+    }
   },
   {
     "id": "breakthrough",
@@ -83,7 +87,11 @@
     ],
     "initial_weather": "cloudy",
     "start_date": "2026-03-07",
-    "start_time": "06:00"
+    "start_time": "06:00",
+    "advance_directions": {
+      "player": {"x": 1, "y": 0},
+      "enemy": {"x": -1, "y": 0}
+    }
   },
   {
     "id": "counter-attack",
@@ -124,7 +132,11 @@
     ],
     "initial_weather": "clear",
     "start_date": "2026-03-06",
-    "start_time": "14:00"
+    "start_time": "14:00",
+    "advance_directions": {
+      "player": {"x": 1, "y": 0},
+      "enemy": {"x": -1, "y": 0}
+    }
   },
   {
     "id": "urban-assault",
@@ -167,7 +179,11 @@
     ],
     "initial_weather": "cloudy",
     "start_date": "2026-03-08",
-    "start_time": "08:00"
+    "start_time": "08:00",
+    "advance_directions": {
+      "player": {"x": 1, "y": 0},
+      "enemy": {"x": -1, "y": 0}
+    }
   },
   {
     "id": "escort-mission",
@@ -201,7 +217,11 @@
     ],
     "initial_weather": "clear",
     "start_date": "2026-03-06",
-    "start_time": "10:00"
+    "start_time": "10:00",
+    "advance_directions": {
+      "player": {"x": 1, "y": 0},
+      "enemy": {"x": -1, "y": 0}
+    }
   },
   {
     "id": "night-recon",
@@ -240,7 +260,11 @@
     ],
     "initial_weather": "clear",
     "start_date": "2026-03-06",
-    "start_time": "22:00"
+    "start_time": "22:00",
+    "advance_directions": {
+      "player": {"x": 1, "y": 0},
+      "enemy": {"x": -1, "y": 0}
+    }
   },
   {
     "id": "mountain-defense",
@@ -281,7 +305,11 @@
     ],
     "initial_weather": "clear",
     "start_date": "2026-03-07",
-    "start_time": "06:00"
+    "start_time": "06:00",
+    "advance_directions": {
+      "player": {"x": 1, "y": 0},
+      "enemy": {"x": -1, "y": 0}
+    }
   },
   {
     "id": "blitzkrieg",
@@ -324,6 +352,10 @@
     ],
     "initial_weather": "clear",
     "start_date": "2026-03-06",
-    "start_time": "04:00"
+    "start_time": "04:00",
+    "advance_directions": {
+      "player": {"x": 1, "y": 0},
+      "enemy": {"x": -1, "y": 0}
+    }
   }
 ]
