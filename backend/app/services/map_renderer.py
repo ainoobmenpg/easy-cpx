@@ -202,7 +202,7 @@ class MapRenderer:
 class FogOfWar:
     """Manages fog of war and player knowledge"""
 
-    def __init__(self, map_width: int = 50, map_height: int = 30):
+    def __init__(self, map_width: int = 50, map_height: int = 50):
         self.width = map_width
         self.height = map_height
         self._known_areas: set[tuple[int, int]] = set()

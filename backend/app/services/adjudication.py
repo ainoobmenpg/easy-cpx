@@ -139,11 +139,15 @@ class AdjudicationCriteria:
             "description": cls.CONDITIONS["superior_firepower"]["description"]
         }
 
-        # 2. Position advantage (simplified - would need terrain system)
+        # 2. Position advantage - check if unit is on favorable terrain
+        # Defensive terrain types: forest, mountain, urban
+        favorable_terrain = ["forest", "mountain", "urban", "hill"]
+        unit_terrain = getattr(unit, 'terrain', None) or "plain"
+        has_position_advantage = unit_terrain in favorable_terrain
         results["position_advantage"] = {
-            "met": True,  # Would check terrain in full implementation
-            "score": 1.0,
-            "description": cls.CONDITIONS["position_advantage"]["description"]
+            "met": has_position_advantage,
+            "score": 1.0 if has_position_advantage else 0.3,
+            "description": f"Position: {unit_terrain} - {'advantage' if has_position_advantage else 'no advantage'}"
         }
 
         # 3. Mobility
@@ -412,9 +416,9 @@ class RuleEngine:
                 outcome = "success"
                 logger.info(f"[MOVE] {unit.name}: ({old_x:.1f},{old_y:.1f}) -> ({unit.x:.1f},{unit.y:.1f})")
             else:
-                # No specific location - move forward by 1-2 cells towards enemy side
+                # No specific location - move forward by 1 cell towards enemy side
                 old_x, old_y = unit.x, unit.y
-                # Default: move 1-2 cells forward (towards higher X, which is enemy side in Israel scenario)
+                # Default: move forward (direction defined by scenario)
                 move_distance = 1
                 unit.x = min(49, unit.x + move_distance)
                 changes.append({
@@ -524,7 +528,7 @@ class RuleEngine:
 
         elif order.order_type == OrderType.DEFEND:
             outcome = "success"
-            unit.status = UnitStatus.INTACT  # Defending units recover slightly
+            # Defend order - no status change, no healing
 
         elif order.order_type == OrderType.RECON:
             outcome = "success"
@@ -545,9 +549,13 @@ class RuleEngine:
         else:
             outcome = "success"
 
-        # Consume supplies
-        self._consume_supplies(unit)
-        self.db.commit()
+        # Consume supplies based on order type
+        if order.order_type == OrderType.ATTACK:
+            self._consume_supplies(unit)
+        elif order.order_type == OrderType.MOVE:
+            # Reduced consumption for movement
+            self._consume_supplies_minimal(unit)
+        # DEFEND, RECON, RETREAT - no consumption
 
         return {
             "order_id": order.id,
@@ -599,6 +607,14 @@ class RuleEngine:
             unit.readiness = SupplyLevel.DEPLETED
         elif unit.readiness == SupplyLevel.DEPLETED:
             unit.readiness = SupplyLevel.EXHAUSTED
+
+    def _consume_supplies_minimal(self, unit: Unit):
+        """Minimal supply consumption for movement (reduced from full combat consumption)"""
+        # Only fuel consumed for movement
+        if unit.fuel == SupplyLevel.FULL:
+            unit.fuel = SupplyLevel.DEPLETED
+        elif unit.fuel == SupplyLevel.DEPLETED:
+            unit.fuel = SupplyLevel.EXHAUSTED
 
     def _process_enemy_activities(self, game_id: int) -> list:
         """Process enemy unit activities with tactical behavior using unit profiles"""

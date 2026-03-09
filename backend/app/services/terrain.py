@@ -324,6 +324,72 @@ def generate_map_terrain(width: int = 50, height: int = 50, seed: int = 42) -> d
     return terrain_map
 
 
+def generate_israel_2026_terrain(width: int = 50, height: int = 50, seed: int = 42) -> dict:
+    """Generate terrain for Israel Northern Command 2026 scenario
+
+    Israel/Lebanon border region with:
+    - Golan Heights (mountain/high ground in northeast)
+    - Lebanese southern forests
+    - Litani River equivalent (water)
+    - Coastal plain and inland valleys
+    """
+    import random
+    random.seed(seed)
+
+    terrain_map = {}
+
+    for y in range(height):
+        for x in range(width):
+            terrain = TerrainType.PLAIN
+
+            # Northern border region (Y: 15-35)
+            if 15 <= y <= 35:
+                # Golan Heights - mountain/high ground in northeast (X: 35-50)
+                if x >= 38 and y <= 25:
+                    if random.random() < 0.5:
+                        terrain = TerrainType.MOUNTAIN
+                    else:
+                        terrain = TerrainType.HIGH_GROUND
+
+                # Upper Galilee - high ground
+                elif x >= 30 and y <= 28:
+                    if random.random() < 0.25:
+                        terrain = TerrainType.HIGH_GROUND
+                    elif random.random() < 0.15:
+                        terrain = TerrainType.MOUNTAIN
+
+                # Lebanese southern forests (X: 28-40)
+                if 28 <= x <= 40 and y >= 22:
+                    if random.random() < 0.25:
+                        terrain = TerrainType.FOREST
+
+                # Litani River equivalent - flowing west to east in mid-region
+                # (X: 25-32, Y: 20-30)
+                if 25 <= x <= 32 and 20 <= y <= 30:
+                    # Main river channel
+                    river_y = 25 + (x - 25) * 0.3  # Slight diagonal
+                    if abs(y - river_y) < 1.5:
+                        terrain = TerrainType.WATER
+                    # River banks
+                    elif abs(y - river_y) < 3:
+                        if random.random() < 0.2:
+                            terrain = TerrainType.SWAMP
+
+                # Coastal plain (X: 0-15) - generally flat
+                if x <= 15:
+                    if random.random() < 0.08:
+                        terrain = TerrainType.URBAN  # Towns/cities
+
+            # Desert areas in south (Y: 0-15)
+            if y < 15:
+                if random.random() < 0.3:
+                    terrain = TerrainType.DESERT
+
+            terrain_map[f"{x},{y}"] = terrain.value
+
+    return terrain_map
+
+
 def get_terrain_display_info() -> dict:
     """Get terrain display information for UI"""
     return {

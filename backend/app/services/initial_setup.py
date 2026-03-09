@@ -19,9 +19,9 @@ class DeploymentZone(Enum):
 class InitialSetupService:
     """Service for managing initial deployment and game setup"""
 
-    # Default scenario date (Cold War crisis simulation)
-    DEFAULT_START_DATE = "1985-11-22"  # Near Thanksgiving 1985
-    DEFAULT_START_TIME = "06:00"  # Dawn
+    # Israel Northern Command scenario (March 2026)
+    DEFAULT_START_DATE = "2026-03-06"  # Israel 2026 scenario
+    DEFAULT_START_TIME = "05:40"  # Dawn, pre-dawn operation
     DEFAULT_SCENARIO_DURATION_HOURS = 72  # 3 days
 
     # Time progression per turn (minutes)
@@ -76,21 +76,24 @@ class InitialSetupService:
         map_height: float,
         side: str = "player"
     ) -> list:
-        """Create initial player deployment"""
-        # Player starts on the western (left) side
+        """Create initial player deployment for Israel 2026 scenario
+
+        Player units deployed along northern border (X: 5-15, Y: 25-35)
+        """
         units = []
 
-        # Main defensive line
-        defensive_line_y = map_height * 0.3
+        # Israel northern border deployment zone
+        # Main defensive line around Y: 28-32, X: 5-15
+        defensive_line_y_base = 30  # Center of deployment area
 
-        # Armor units
+        # Armor units - forward positions
         units.extend([
             {
                 "name": "Alpha Company",
                 "unit_type": "nato_armor",
                 "side": side,
-                "x": 2 + random.uniform(-0.5, 0.5),
-                "y": defensive_line_y + random.uniform(-1, 1),
+                "x": 6 + random.uniform(-1, 1),
+                "y": 32 + random.uniform(-2, 2),
                 "status": "intact",
                 "strength": 100,
                 "ammo": "full",
@@ -102,8 +105,8 @@ class InitialSetupService:
                 "name": "Bravo Company",
                 "unit_type": "nato_armor",
                 "side": side,
-                "x": 4 + random.uniform(-0.5, 0.5),
-                "y": defensive_line_y + random.uniform(-1, 1),
+                "x": 10 + random.uniform(-1, 1),
+                "y": 28 + random.uniform(-2, 2),
                 "status": "intact",
                 "strength": 100,
                 "ammo": "full",
@@ -113,14 +116,14 @@ class InitialSetupService:
             },
         ])
 
-        # Infantry
+        # Infantry battalions
         units.extend([
             {
                 "name": "1st Battalion",
                 "unit_type": "nato_infantry",
                 "side": side,
-                "x": 3 + random.uniform(-0.5, 0.5),
-                "y": defensive_line_y + random.uniform(-2, 2),
+                "x": 8 + random.uniform(-1, 1),
+                "y": 30 + random.uniform(-2, 2),
                 "status": "intact",
                 "strength": 100,
                 "ammo": "full",
@@ -132,8 +135,8 @@ class InitialSetupService:
                 "name": "2nd Battalion",
                 "unit_type": "nato_infantry",
                 "side": side,
-                "x": 5 + random.uniform(-0.5, 0.5),
-                "y": defensive_line_y + random.uniform(-2, 2),
+                "x": 12 + random.uniform(-1, 1),
+                "y": 28 + random.uniform(-2, 2),
                 "status": "intact",
                 "strength": 100,
                 "ammo": "full",
@@ -143,14 +146,14 @@ class InitialSetupService:
             },
         ])
 
-        # Artillery
+        # Artillery - rear positions
         units.extend([
             {
                 "name": "Artillery Battery A",
                 "unit_type": "nato_artillery",
                 "side": side,
-                "x": 1 + random.uniform(-0.3, 0.3),
-                "y": defensive_line_y + random.uniform(-1, 1),
+                "x": 5 + random.uniform(-0.5, 0.5),
+                "y": 28 + random.uniform(-1, 1),
                 "status": "intact",
                 "strength": 100,
                 "ammo": "full",
@@ -160,14 +163,14 @@ class InitialSetupService:
             },
         ])
 
-        # Air defense
+        # Air defense - rear protection
         units.extend([
             {
                 "name": "Air Defense Platoon",
                 "unit_type": "nato_air_defense",
                 "side": side,
-                "x": 0.5,
-                "y": defensive_line_y,
+                "x": 4 + random.uniform(-0.5, 0.5),
+                "y": 30 + random.uniform(-1, 1),
                 "status": "intact",
                 "strength": 100,
                 "ammo": "full",
@@ -177,23 +180,97 @@ class InitialSetupService:
             },
         ])
 
-        # Recon units
+        # Recon units - forward scout positions
         units.extend([
             {
                 "name": "Recon Platoon",
-                "unit_type": "nato_multirole",
+                "unit_type": "nato_recon",
                 "side": side,
-                "x": 6,
-                "y": defensive_line_y + random.uniform(-3, 3),
+                "x": 14 + random.uniform(-1, 1),
+                "y": 30 + random.uniform(-2, 2),
                 "status": "intact",
                 "strength": 100,
                 "ammo": "full",
                 "fuel": "full",
                 "readiness": "full",
                 "deployment_zone": DeploymentZone.FRONT_LINE.value,
-                "recon_range": 4,
+                "recon_value": 1.3,
+                "visibility_range": 5,
+                "infantry_subtype": "scout",
             },
         ])
+
+        return units
+
+    def create_uav_deployment(
+        self,
+        map_width: float,
+        map_height: float,
+        side: str = "player"
+    ) -> list:
+        """Create UAV units for modern scenarios
+
+        UAVs provide large reconnaissance coverage but have no combat capability
+        """
+        units = []
+
+        # UAV deployment - operates from rear area but has long range
+        if side == "player":
+            units.extend([
+                {
+                    "name": "Shadow UAV",
+                    "unit_type": "nato_uav",
+                    "side": side,
+                    "x": 3 + random.uniform(-0.5, 0.5),
+                    "y": 25 + random.uniform(-3, 3),
+                    "status": "intact",
+                    "strength": 100,
+                    "ammo": "full",
+                    "fuel": "full",
+                    "readiness": "full",
+                    "deployment_zone": DeploymentZone.REAR.value,
+                    "recon_value": 1.5,
+                    "visibility_range": 8,
+                    "notes": "Tactical UAV, reconnaissance only",
+                },
+                {
+                    "name": "Reaper UAV",
+                    "unit_type": "nato_uav",
+                    "side": side,
+                    "x": 2 + random.uniform(-0.5, 0.5),
+                    "y": 35 + random.uniform(-3, 3),
+                    "status": "intact",
+                    "strength": 100,
+                    "ammo": "full",
+                    "fuel": "full",
+                    "readiness": "full",
+                    "deployment_zone": DeploymentZone.REAR.value,
+                    "recon_value": 1.8,
+                    "visibility_range": 10,
+                    "notes": "Medium-altitude UAV, reconnaissance only",
+                },
+            ])
+        else:
+            # Enemy UAV
+            units.extend([
+                {
+                    "name": "Enemy UAV",
+                    "unit_type": "wp_uav",
+                    "side": side,
+                    "x": 45 + random.uniform(-2, 2),
+                    "y": 28 + random.uniform(-3, 3),
+                    "status": "intact",
+                    "strength": 100,
+                    "ammo": "full",
+                    "fuel": "full",
+                    "readiness": "full",
+                    "deployment_zone": DeploymentZone.REAR.value,
+                    "recon_value": 1.3,
+                    "visibility_range": 7,
+                    "is_concealed": True,
+                    "detection_difficulty": 40,
+                },
+            ])
 
         return units
 
@@ -203,25 +280,27 @@ class InitialSetupService:
         map_height: float,
         reveal_level: int = 0
     ) -> list:
-        """Create enemy deployment with concealment rules
+        """Create enemy deployment with concealment rules for Israel 2026
 
+        Enemy (Lebanon-based forces): X: 25-40, Y: 20-35
         reveal_level: 0-100, how much info is available to player
         """
-        # Enemy starts on the eastern (right) side
         units = []
 
-        # Concealment zone - enemies start further east
-        base_x = map_width * 0.7  # Start at 70% of map
+        # Enemy deployment zone in Lebanon - X: 25-40, Y: 20-35
+        base_x_min = 28  # Start of concealment zone
+        base_x_max = 40  # End of enemy deployment
+        base_y_min = 22
+        base_y_max = 34
 
-        # Randomize exact positions within concealment zone
-        for _ in range(3):
-            # Armor in concealed positions
+        # Armor units - main strike force
+        for i in range(3):
             unit = {
-                "name": f"Enemy Tank Company {random.randint(1,9)}",
+                "name": f"Enemy Tank Company {i+1}",
                 "unit_type": "wp_armor",
                 "side": "enemy",
-                "x": base_x + random.uniform(2, 6),
-                "y": map_height * 0.2 + random.uniform(0, map_height * 0.6),
+                "x": 30 + random.uniform(0, 8),
+                "y": base_y_min + random.uniform(0, base_y_max - base_y_min),
                 "status": "intact",
                 "strength": 100,
                 "ammo": "full",
@@ -234,14 +313,14 @@ class InitialSetupService:
             }
             units.append(unit)
 
-        # Infantry
-        for _ in range(2):
+        # Infantry - second line
+        for i in range(2):
             unit = {
-                "name": f"Enemy Motor Rifle {random.randint(1,9)}",
+                "name": f"Enemy Motor Rifle {i+1}",
                 "unit_type": "wp_infantry",
                 "side": "enemy",
-                "x": base_x + random.uniform(1, 5),
-                "y": map_height * 0.2 + random.uniform(0, map_height * 0.6),
+                "x": 28 + random.uniform(0, 6),
+                "y": base_y_min + random.uniform(0, base_y_max - base_y_min),
                 "status": "intact",
                 "strength": 100,
                 "ammo": "full",
@@ -253,13 +332,13 @@ class InitialSetupService:
             }
             units.append(unit)
 
-        # Artillery
+        # Artillery - rear fire support
         unit = {
             "name": "Enemy Artillery Regiment",
             "unit_type": "wp_artillery",
             "side": "enemy",
-            "x": base_x + random.uniform(3, 7),
-            "y": map_height * 0.5,
+            "x": 38 + random.uniform(0, 4),
+            "y": 28 + random.uniform(-3, 3),
             "status": "intact",
             "strength": 100,
             "ammo": "full",
@@ -271,14 +350,14 @@ class InitialSetupService:
         }
         units.append(unit)
 
-        # Air defense
-        for _ in range(2):
+        # Air defense - distributed coverage
+        for i in range(2):
             unit = {
-                "name": f"Enemy SAM {random.randint(1,3)}",
+                "name": f"Enemy SAM {i+1}",
                 "unit_type": "wp_air_defense",
                 "side": "enemy",
-                "x": base_x + random.uniform(2, 8),
-                "y": map_height * 0.3 + random.uniform(0, map_height * 0.4),
+                "x": 36 + random.uniform(0, 4),
+                "y": 26 + random.uniform(-3, 5),
                 "status": "intact",
                 "strength": 100,
                 "ammo": "full",
@@ -378,18 +457,34 @@ class InitialSetupService:
 
     def setup_game(
         self,
-        map_width: float = 20,
-        map_height: float = 15,
+        map_width: float = 50,
+        map_height: float = 50,
         reveal_level: int = 0,
-        intel_level: int = 20
+        intel_level: int = 20,
+        include_uav: bool = True
     ) -> dict:
-        """Complete game setup"""
+        """Complete game setup
+
+        Args:
+            map_width: Width of the map
+            map_height: Height of the map
+            reveal_level: 0-100, how much enemy info is available
+            intel_level: 0-100, player's initial intel quality
+            include_uav: Whether to include UAV units (modern scenario)
+        """
         # Initialize date/time
         date_time = self.initialize_game_date()
 
         # Create deployments
         player_units = self.create_player_deployment(map_width, map_height, "player")
         enemy_units = self.create_enemy_deployment(map_width, map_height, reveal_level)
+
+        # Add UAV units for modern scenarios
+        if include_uav:
+            player_uavs = self.create_uav_deployment(map_width, map_height, "player")
+            enemy_uavs = self.create_uav_deployment(map_width, map_height, "enemy")
+            player_units.extend(player_uavs)
+            enemy_units.extend(enemy_uavs)
 
         # Generate initial intel
         initial_intel = self.generate_initial_intel(enemy_units, intel_level)
@@ -407,6 +502,7 @@ class InitialSetupService:
                 "width": map_width,
                 "height": map_height,
             },
+            "include_uav": include_uav,
         }
 
 

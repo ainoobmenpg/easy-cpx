@@ -85,6 +85,35 @@
     - test_adjudication.py (拡張)
   - テスト数: 96 → 281（+185）
 
+### 優先度： высоких（ChatGPTレビュー対応）
+
+- [x] README/セットアップ/DB設定の実装と一致 `cc:完了`
+  - Next.js 16に更新、alembic.iniを修正
+  - ファイル: `README.md`, `alembic.ini`
+
+- [x] Orderモデルの1:N修正 `cc:完了`
+  - Unit 1:1 Order → Unit 1:N Orders
+  - ファイル: `backend/app/models/__init__.py`
+
+- [x] 裁定ロジックのゲーム化しすぎ修正 `cc:完了`
+  - DEFENDのINTACT回復を削除
+  - 消耗ロジックを命令種別で差异化
+  - 地形効果をposition_advantageに反映
+  - ファイル: `backend/app/services/adjudication.py`
+
+- [x] AI入出力契約をunit_idベースで固定 `cc:完了`
+  - AIプロンプトでunit_idのみを返すように指示
+  - ファイル: `backend/app/services/ai_client.py`
+
+- [x] scenario定義とルールエンジンの分離 `cc:完了`
+  - Israelシナリオコメントを一般化
+  - ファイル: `backend/app/services/adjudication.py`, `backend/app/models/__init__.py`
+  - ファイル: `backend/app/services/adjudication.py`, `backend/app/data/scenarios/`
+
+- [ ] E2Eテストの実装 `cc:TODO`
+  - 対応: 「命令→裁定→SITREP→次ターン」の一本道をテスト
+  - ファイル: `backend/tests/`
+
 ### 優先度：パフォーマンス最適化
 
 - [ ] 追加パフォーマンス最適化（取り止め） `cc:TODO`

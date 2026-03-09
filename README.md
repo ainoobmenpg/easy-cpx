@@ -19,7 +19,7 @@ Operational CPX is a strategic-level military simulation where players act as co
 
 ## Tech Stack
 
-- **Frontend**: Next.js 14, React, TypeScript, Tailwind CSS
+- **Frontend**: Next.js 16, React, TypeScript, Tailwind CSS
 - **Backend**: Python FastAPI, SQLAlchemy
 - **Database**: SQLite (development), PostgreSQL (production)
 - **AI**: MiniMax M2.5 for order parsing and SITREP generation
@@ -76,14 +76,9 @@ easy-cpx/
    cd backend
    python -m venv .venv
    source .venv/bin/activate  # Windows: .venv\Scripts\activate
-   pip install -r requirements.txt
+   pip install fastapi uvicorn sqlalchemy pydantic httpx
    ```
-
-4. **Run Database Migrations**
-   ```bash
-   cd backend
-   alembic upgrade head
-   ```
+   Note: App uses SQLite by default (set DATABASE_URL for PostgreSQL)
 
 ### Running the Application
 

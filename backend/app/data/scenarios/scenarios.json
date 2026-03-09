@@ -1,0 +1,329 @@
+[
+  {
+    "id": "defend-the-bridge",
+    "name": "橋の防衛",
+    "description": "敵の進撃を阻止し、橋を維持せよ。敵主力装甲部隊が接近中、味方増援が到着するまでの時間猶予仅有り。",
+    "difficulty": "normal",
+    "map_size": {
+      "width": 50,
+      "height": 50
+    },
+    "terrain_seed": 1001,
+    "player_forces": {
+      "infantry": 3,
+      "armor": 2,
+      "artillery": 1,
+      "reconnaissance": 1
+    },
+    "enemy_forces": {
+      "infantry": 4,
+      "armor": 3,
+      "artillery": 2
+    },
+    "objectives": [
+      {
+        "id": "obj_1",
+        "type": "hold",
+        "target": "bridge",
+        "description": "橋の防衛を維持",
+        "success_condition": "bridge_under_control",
+        "turns_to_complete": 10
+      },
+      {
+        "id": "obj_2",
+        "type": "destroy",
+        "target": "enemy_column",
+        "description": "敵装甲縦隊を撃破",
+        "success_condition": "enemy_armor_destroyed",
+        "min_targets": 2
+      }
+    ],
+    "initial_weather": "clear",
+    "start_date": "2026-03-06",
+    "start_time": "05:40"
+  },
+  {
+    "id": "breakthrough",
+    "name": "突破口",
+    "description": "敵戦線を突破し、後方拠点占领せよ。激しい抵抗が予想される。",
+    "difficulty": "hard",
+    "map_size": {
+      "width": 60,
+      "height": 40
+    },
+    "terrain_seed": 2002,
+    "player_forces": {
+      "infantry": 4,
+      "armor": 3,
+      "artillery": 2,
+      "reconnaissance": 2
+    },
+    "enemy_forces": {
+      "infantry": 6,
+      "armor": 5,
+      "artillery": 3,
+      "air_defense": 2
+    },
+    "objectives": [
+      {
+        "id": "obj_1",
+        "type": "advance",
+        "target": "enemy_line",
+        "description": "敵戦線を突破",
+        "success_condition": "breakthrough_achieved",
+        "advance_distance": 15
+      },
+      {
+        "id": "obj_2",
+        "type": "capture",
+        "target": "headquarters",
+        "description": "敵後方司令占領",
+        "success_condition": "hq_captured"
+      }
+    ],
+    "initial_weather": "cloudy",
+    "start_date": "2026-03-07",
+    "start_time": "06:00"
+  },
+  {
+    "id": "counter-attack",
+    "name": "反撃",
+    "description": "敵の攻撃を撃退し、奪われた地域を奪還せよ。味方は劣勢だが、地形を味方に付けることができる。",
+    "difficulty": "easy",
+    "map_size": {
+      "width": 40,
+      "height": 40
+    },
+    "terrain_seed": 3003,
+    "player_forces": {
+      "infantry": 4,
+      "armor": 1,
+      "artillery": 2,
+      "reconnaissance": 1
+    },
+    "enemy_forces": {
+      "infantry": 3,
+      "armor": 2,
+      "artillery": 1
+    },
+    "objectives": [
+      {
+        "id": "obj_1",
+        "type": "defend",
+        "target": "town",
+        "description": "街を防衛",
+        "success_condition": "town_secured"
+      },
+      {
+        "id": "obj_2",
+        "type": "recapture",
+        "target": "hill",
+        "description": "高地奪還",
+        "success_condition": "hill_captured"
+      }
+    ],
+    "initial_weather": "clear",
+    "start_date": "2026-03-06",
+    "start_time": "14:00"
+  },
+  {
+    "id": "urban-assault",
+    "name": "都市攻略",
+    "description": "敵が 占領した都市を奪還せよ。街区ごとに攻略が必要となり、砲兵火力と連携した慎重な行動が求められる。",
+    "difficulty": "hard",
+    "map_size": {
+      "width": 50,
+      "height": 40
+    },
+    "terrain_seed": 4004,
+    "player_forces": {
+      "infantry": 5,
+      "armor": 2,
+      "artillery": 3,
+      "reconnaissance": 1
+    },
+    "enemy_forces": {
+      "infantry": 6,
+      "armor": 2,
+      "artillery": 2,
+      "air_defense": 1
+    },
+    "objectives": [
+      {
+        "id": "obj_1",
+        "type": "capture",
+        "target": "city_center",
+        "description": "市中心部を攻略",
+        "success_condition": "city_captured"
+      },
+      {
+        "id": "obj_2",
+        "type": "destroy",
+        "target": "enemy_battalions",
+        "description": "敵兵力撃破",
+        "success_condition": "enemy_defeated",
+        "min_targets": 5
+      }
+    ],
+    "initial_weather": "cloudy",
+    "start_date": "2026-03-08",
+    "start_time": "08:00"
+  },
+  {
+    "id": "escort-mission",
+    "name": "護衛任務",
+    "description": "輸送補給部隊を目的地まで護衛せよ。敵遊撃部隊の攻撃が予想される。",
+    "difficulty": "normal",
+    "map_size": {
+      "width": 60,
+      "height": 50
+    },
+    "terrain_seed": 5005,
+    "player_forces": {
+      "infantry": 2,
+      "armor": 1,
+      "artillery": 1,
+      "reconnaissance": 2
+    },
+    "enemy_forces": {
+      "infantry": 3,
+      "armor": 2,
+      "artillery": 1
+    },
+    "objectives": [
+      {
+        "id": "obj_1",
+        "type": "escort",
+        "target": "supply_convoy",
+        "description": "補給線を維持",
+        "success_condition": "convoy_arrived"
+      }
+    ],
+    "initial_weather": "clear",
+    "start_date": "2026-03-06",
+    "start_time": "10:00"
+  },
+  {
+    "id": "night-recon",
+    "name": "夜間偵察",
+    "description": "敵陣地の偵察任務。視界不良のため慎重な行動が必要だが、奇襲の機会でもある。",
+    "difficulty": "easy",
+    "map_size": {
+      "width": 40,
+      "height": 40
+    },
+    "terrain_seed": 6006,
+    "player_forces": {
+      "infantry": 2,
+      "reconnaissance": 3
+    },
+    "enemy_forces": {
+      "infantry": 2,
+      "armor": 1,
+      "artillery": 1
+    },
+    "objectives": [
+      {
+        "id": "obj_1",
+        "type": "recon",
+        "target": "enemy_position",
+        "description": "敵位置を特定",
+        "success_condition": "position_identified"
+      },
+      {
+        "id": "obj_2",
+        "type": "avoid",
+        "target": "detection",
+        "description": "発見されずに任務を果たせ",
+        "success_condition": "undetected"
+      }
+    ],
+    "initial_weather": "clear",
+    "start_date": "2026-03-06",
+    "start_time": "22:00"
+  },
+  {
+    "id": "mountain-defense",
+    "name": "山岳防衛",
+    "description": "山岳地帯の要衝を防衛せよ。地形を味方に付け、敵の攻撃を撃退しろ。",
+    "difficulty": "normal",
+    "map_size": {
+      "width": 45,
+      "height": 45
+    },
+    "terrain_seed": 7007,
+    "player_forces": {
+      "infantry": 4,
+      "armor": 1,
+      "artillery": 2,
+      "reconnaissance": 1
+    },
+    "enemy_forces": {
+      "infantry": 4,
+      "armor": 3,
+      "artillery": 2
+    },
+    "objectives": [
+      {
+        "id": "obj_1",
+        "type": "hold",
+        "target": "mountain_pass",
+        "description": "山岳通路を維持",
+        "success_condition": "pass_secured"
+      },
+      {
+        "id": "obj_2",
+        "type": "defend",
+        "target": "command_post",
+        "description": "司令基地防衛",
+        "success_condition": "cp_secured"
+      }
+    ],
+    "initial_weather": "clear",
+    "start_date": "2026-03-07",
+    "start_time": "06:00"
+  },
+  {
+    "id": "blitzkrieg",
+    "name": "電撃作戦",
+    "description": "快速装甲部隊で敵後方を奇襲せよ。早期決着が重要。",
+    "difficulty": "hard",
+    "map_size": {
+      "width": 70,
+      "height": 50
+    },
+    "terrain_seed": 8008,
+    "player_forces": {
+      "infantry": 3,
+      "armor": 5,
+      "artillery": 2,
+      "reconnaissance": 2
+    },
+    "enemy_forces": {
+      "infantry": 4,
+      "armor": 3,
+      "artillery": 2,
+      "air_defense": 2
+    },
+    "objectives": [
+      {
+        "id": "obj_1",
+        "type": "advance",
+        "target": "enemy_rear",
+        "description": "敵後方深く侵入",
+        "success_condition": "deep_penetration",
+        "advance_distance": 30
+      },
+      {
+        "id": "obj_2",
+        "type": "capture",
+        "target": "logistics_base",
+        "description": "敵兵站基地占領",
+        "success_condition": "base_captured"
+      }
+    ],
+    "initial_weather": "clear",
+    "start_date": "2026-03-06",
+    "start_time": "04:00"
+  }
+]

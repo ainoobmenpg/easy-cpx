@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback, memo, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 
 interface Unit {
   id: number;
@@ -14,6 +15,18 @@ interface Unit {
   fuel: string;
   readiness: string;
   strength: number;
+  infantry_subtype?: string;
+  recon_value?: number;
+  visibility_range?: number;
+  observation_confidence?: string;
+  last_observed_turn?: number;
+  // Extended reconnaissance fields
+  confidence_score?: number;
+  estimated_x?: number;
+  estimated_y?: number;
+  position_accuracy?: number;
+  last_known_type?: string;
+  observation_sources?: Array<{ observer_id: number; confidence: number }>;
 }
 
 interface GameState {
@@ -40,8 +53,85 @@ interface TurnLog {
   orders: { unit: string; outcome: string }[];
 }
 
-export default function GamePage() {
-  const [gameId] = useState(1);
+// Memoized Unit component for performance
+const UnitMarker = memo(function UnitMarker({
+  unit,
+  selectedUnitId,
+  onSelect
+}: {
+  unit: Unit;
+  selectedUnitId: number | null;
+  onSelect: (unit: Unit) => void;
+}) {
+  const svgX = Math.floor(unit.x) + 0.5;
+  const svgY = Math.floor(unit.y) + 0.5;
+  const sideColor = unit.side === 'player' ? '#3b82f6' : '#ef4444';
+  const isSelected = selectedUnitId === unit.id;
+
+  // NATO symbol map
+  const typeMap: Record<string, string> = {
+    'nato_infantry': 'infantry', 'nato_armor': 'armor', 'nato_artillery': 'artillery',
+    'nato_multirole': 'reconnaissance', 'nato_air_defense': 'air_defense', 'nato_uav': 'uav',
+    'wp_infantry': 'infantry', 'wp_armor': 'armor', 'wp_artillery': 'artillery',
+    'wp_air_defense': 'air_defense', 'wp_uav': 'uav', 'infantry': 'infantry', 'armor': 'armor',
+    'artillery': 'artillery', 'reconnaissance': 'reconnaissance', 'air_defense': 'air_defense',
+    'uav': 'uav',
+  };
+  const symbols: Record<string, string> = {
+    infantry: '✕', armor: '⇒', artillery: '+', reconnaissance: '◇', air_defense: '▲', uav: '◈',
+  };
+  const symbol = symbols[typeMap[unit.type] || 'infantry'];
+
+  // Status color
+  const statusColors: Record<string, string> = {
+    intact: '#22c55e', light_damage: '#eab308', medium_damage: '#f97316',
+    heavy_damage: '#ef4444', destroyed: '#6b7280'
+  };
+  const statusColor = statusColors[unit.status] || '#22c55e';
+
+  // Observation confidence styling for enemy units
+  const isEnemy = unit.side === 'enemy';
+  const confidence = unit.observation_confidence;
+  const confidenceScore = unit.confidence_score;
+  let confidenceOpacity = 1.0;
+  let confidenceBorder = false;
+  let confidenceLabel = '';
+  if (isEnemy && confidence) {
+    if (confidence === 'unknown') {
+      confidenceOpacity = 0.5; // Unknown - more transparent
+      confidenceBorder = true;
+      confidenceLabel = confidenceScore !== undefined ? `${confidenceScore}%` : '?';
+    } else if (confidence === 'estimated') {
+      confidenceOpacity = 0.75; // Estimated - slightly transparent
+      confidenceBorder = true;
+      confidenceLabel = confidenceScore !== undefined ? `${confidenceScore}%` : '~';
+    } else {
+      // confirmed
+      confidenceLabel = confidenceScore !== undefined ? `${confidenceScore}%` : 'OK';
+    }
+    // confirmed - fully opaque, no border
+  }
+
+  return (
+    <g onClick={() => onSelect(unit)} style={{ cursor: 'pointer' }}>
+      <rect x={svgX - 0.6} y={svgY - 0.5} width="1.2" height="1.0"
+        fill={sideColor} stroke={isSelected ? '#fff' : (confidenceBorder ? '#fbbf24' : 'none')} strokeWidth="0.1" opacity={confidenceOpacity * 0.95}/>
+      <text x={svgX} y={svgY + 0.2} fontSize="0.8" fill="#fff" textAnchor="middle" fontWeight="bold" opacity={confidenceOpacity}>
+        {symbol}
+      </text>
+      <text x={svgX + 0.8} y={svgY + 0.8} fontSize="0.5" fill="#fff" stroke="#000" strokeWidth="0.15" paintOrder="stroke" fontWeight="bold" opacity={confidenceOpacity}>
+        {unit.name}{confidenceLabel ? ` (${confidenceLabel})` : ''}
+      </text>
+      <rect x={svgX + 0.4} y={svgY + 0.4} width="0.3" height="0.2" fill={statusColor} stroke="#000" strokeWidth="0.05" opacity={confidenceOpacity}/>
+    </g>
+  );
+});
+
+function GameContent() {
+  const searchParams = useSearchParams();
+  const gameIdParam = searchParams.get('gameId');
+  const router = useRouter();
+  const [gameId] = useState(gameIdParam ? parseInt(gameIdParam, 10) : 1);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [sitrep, setSitrep] = useState<Sitrep | null>(null);
   const [orderInput, setOrderInput] = useState('');
@@ -52,6 +142,12 @@ export default function GamePage() {
   const [turnLogs, setTurnLogs] = useState<TurnLog[]>([]);
   const [zoom, setZoom] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  // Map pan state (for drag to pan)
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [didPan, setDidPan] = useState(false);  // Track if actual panning occurred
+  const [terrainTooltip, setTerrainTooltip] = useState<{ x: number; y: number; terrain: string; info: { name: string; symbol: string; color: string } } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { fetchGameState(); }, [gameId]);
@@ -119,25 +215,147 @@ export default function GamePage() {
       const data = await res.json();
       setSitrep(data.sitrep);
       setGameState(prev => prev ? { ...prev, turn: data.turn + 1, time: data.next_time } : null);
-      const newLog: TurnLog = {
-        turn: data.turn,
-        orders: (data.results || []).map((r: any) => ({
+
+      // Refresh game state including units after turn advancement
+      const stateRes = await fetch(`http://localhost:8000/api/game/${gameId}/state`);
+      const stateData = await stateRes.json();
+      setGameState(stateData);
+
+      // Build log entries from player orders, enemy results, and events
+      const logEntries: { unit: string; outcome: string }[] = [];
+
+      // Add player order results
+      (data.results || []).forEach((r: any) => {
+        logEntries.push({
           unit: r.unit_name || `Unit ${r.order_id}`,
           outcome: r.outcome
-        })),
+        });
+      });
+
+      // Add enemy results
+      (data.enemy_results || []).forEach((r: any) => {
+        logEntries.push({
+          unit: `[敵] ${r.unit_name || 'Unknown'}`,
+          outcome: r.outcome || 'attack'
+        });
+      });
+
+      // Add enemy activity events (movement toward player, attacks)
+      (data.events || []).forEach((e: any) => {
+        if (e.type === 'enemy_move' && e.target) {
+          logEntries.push({
+            unit: `[敵] ${e.unit_name || 'Unknown'}`,
+            outcome: `→ ${e.target}`
+          });
+        } else if (e.type === 'enemy_attack_available') {
+          logEntries.push({
+            unit: `[敵] ${e.unit_name || 'Unknown'}`,
+            outcome: 'attack_ready'
+          });
+        }
+      });
+
+      const newLog: TurnLog = {
+        turn: data.turn,
+        orders: logEntries,
       };
       setTurnLogs(prev => [newLog, ...prev]);
     } catch (e) { console.error('Failed to advance turn:', e); }
     setLoading(false);
   };
 
-  // Zoom with Ctrl+Wheel only
-  const handleWheel = (e: React.WheelEvent) => {
-    if (!e.ctrlKey) return; // Let normal scroll pass through
-    e.preventDefault();
+  const endGame = async () => {
+    if (!confirm('End the game and view debriefing?')) return;
+    try {
+      await fetch('http://localhost:8000/api/game/end', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ game_id: gameId })
+      });
+      router.push(`/debriefing?gameId=${gameId}`);
+    } catch (e) {
+      console.error('Failed to end game:', e);
+    }
+  };
+
+  // Zoom with wheel
+  const handleWheel = useCallback((e: React.WheelEvent) => {
     const delta = e.deltaY > 0 ? -0.2 : 0.2;
     setZoom(z => Math.max(0.5, Math.min(3, z + delta)));
-  };
+  }, []);
+
+  // Pan handlers - memoized
+  const handlePanStart = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    setIsPanning(true);
+    setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+    setDidPan(false);  // Reset pan flag
+  }, [pan.x, pan.y]);
+
+  const handlePan = useCallback((e: React.MouseEvent) => {
+    if (!isPanning) return;
+    setDidPan(true);  // Mark that we actually panned
+    setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y });
+  }, [isPanning, panStart.x, panStart.y]);
+
+  const handlePanEnd = useCallback(() => {
+    setIsPanning(false);
+  }, []);
+
+  // Memoized zoom handlers
+  const handleZoomIn = useCallback(() => setZoom(z => Math.min(3, z + 0.2)), []);
+  const handleZoomOut = useCallback(() => setZoom(z => Math.max(0.5, z - 0.2)), []);
+  const handleZoomReset = useCallback(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, []);
+
+  // Memoized grid lines as single path elements (was 124 line elements)
+  const gridLines = useMemo(() => {
+    // Minor grid lines (every 1 unit)
+    let minorPath = '';
+    for (let i = 0; i <= 50; i++) {
+      minorPath += `M${i},0 V50 M0,${i} H50`;
+    }
+    // Major grid lines (every 5 units)
+    let majorPath = '';
+    for (let i = 0; i <= 50; i += 5) {
+      majorPath += `M${i},0 V50 M0,${i} H50`;
+    }
+    return { minorPath, majorPath };
+  }, []);
+
+  // Memoized terrain data processing
+  const terrainElements = useMemo(() => {
+    if (!gameState?.terrain) return [];
+    const terrainByGrid: Record<string, { key: string; terrainType: string }> = {};
+    Object.entries(gameState.terrain).forEach(([key, terrainType]) => {
+      const [x, y] = key.split(',').map(Number);
+      const gridX = Math.floor(x);
+      const gridY = Math.floor(y);
+      const gridKey = `${gridX},${gridY}`;
+      if (!terrainByGrid[gridKey] && terrainType !== 'plain') {
+        terrainByGrid[gridKey] = { key, terrainType };
+      }
+    });
+    return Object.values(terrainByGrid).map(({ key, terrainType }) => {
+      const [x, y] = key.split(',').map(Number);
+      const gridX = Math.floor(x);
+      const gridY = Math.floor(y);
+      const svgX = gridX + 0.5;
+      const svgY = gridY + 0.5;
+      const info = gameState.terrain_info?.[terrainType];
+      if (!info) return null;
+      return { key: `terrain-${key}`, svgX, svgY, gridX, gridY, terrainType, info };
+    }).filter(Boolean);
+  }, [gameState?.terrain, gameState?.terrain_info]);
+
+  // Memoized unit select handler
+  const handleUnitSelect = useCallback((unit: Unit) => {
+    // Don't select unit if user was panning (dragging)
+    if (didPan) return;
+    setSelectedUnit(unit);
+  }, [didPan]);
+
+  // Memoized unit list for rendering
+  const unitList = useMemo(() => gameState?.units || [], [gameState?.units]);
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = { intact: '#22c55e', light_damage: '#eab308', medium_damage: '#f97316', heavy_damage: '#ef4444', destroyed: '#6b7280' };
@@ -149,22 +367,52 @@ export default function GamePage() {
     return labels[status] || status;
   };
   const getSupplyLabel = (level: string) => { const labels: Record<string, string> = { full: '満', depleted: '少', exhausted: '枯' }; return labels[level] || level; };
-  const getOutcomeIcon = (outcome: string) => {
-    const icons: Record<string, string> = { success: '✅', partial: '⚠️', failed: '❌', blocked: '🚫', cancelled: '⏸️' };
+  const getOutcomeIcon = (outcome: string, unitName?: string) => {
+    const icons: Record<string, string> = {
+      success: '✅', partial: '⚠️', failed: '❌', blocked: '🚫', cancelled: '⏸️',
+      attack: '⚔️', attack_ready: '🎯', move: '➡️'
+    };
+    // For enemy units, show different icons
+    if (unitName && unitName.startsWith('[敵]')) {
+      if (outcome === 'failed') return '💥';  // Enemy attack failed
+      if (outcome === 'success') return '🔥';  // Enemy attack succeeded
+      if (outcome === 'partial') return '⚡';  // Partial
+      if (outcome === 'attack') return '⚔️';
+      if (outcome === 'attack_ready') return '🎯';
+    }
+    // Check if outcome starts with "→ " (movement toward target)
+    if (outcome && outcome.startsWith('→ ')) return '➡️';
     return icons[outcome] || '❓';
   };
 
   // NATO APP-6 symbol paths for unit types
   const getNatoSymbol = (unitType: string) => {
-    const symbols: Record<string, { path: string; transform: string }> = {
-      infantry: { path: 'M25 35 L75 65 M75 35 L25 65', transform: '' },
-      armor: { path: 'M35 50 L55 35 L55 45 L80 45 L80 55 L55 55 L55 65 Z M65 50 L45 35 L45 45 L20 45 L20 55 L45 55 L45 65 Z', transform: '' },
-      artillery: { path: 'M50 35 L50 65 M30 50 L70 50', transform: '' },
-      'combined_arms': { path: 'M30 40 L70 40 L70 60 L30 60 Z', transform: '' },
-      reconnaissance: { path: 'M50 35 L70 50 L50 65 L30 50 Z', transform: '' },
-      'air_defense': { path: 'M50 38 L60 58 L50 52 L40 58 Z M50 38 L50 28 M35 62 L65 62', transform: '' },
+    // Map API unit types to symbol keys
+    const typeMap: Record<string, string> = {
+      'nato_infantry': 'infantry',
+      'nato_armor': 'armor',
+      'nato_artillery': 'artillery',
+      'nato_multirole': 'reconnaissance',
+      'nato_air_defense': 'air_defense',
+      'wp_infantry': 'infantry',
+      'wp_armor': 'armor',
+      'wp_artillery': 'artillery',
+      'wp_air_defense': 'air_defense',
+      'infantry': 'infantry',
+      'armor': 'armor',
+      'artillery': 'artillery',
+      'reconnaissance': 'reconnaissance',
+      'air_defense': 'air_defense',
     };
-    return symbols[unitType] || symbols.infantry;
+    const mappedType = typeMap[unitType] || 'infantry';
+    const symbols: Record<string, string> = {
+      infantry: '✕',
+      armor: '⇒',
+      artillery: '+',
+      reconnaissance: '◇',
+      air_defense: '▲',
+    };
+    return symbols[mappedType] || '✕';
   };
 
   const getUnitTypeColor = (unitType: string) => {
@@ -179,25 +427,24 @@ export default function GamePage() {
     return colors[unitType] || '#fff';
   };
 
-  // Convert 50x50 coordinates to 10x10 grid display
-  // terrain x,y (0-49) -> grid cell (0-9)
+  // Convert 50x50 coordinates to 20x10 grid display (expanded map)
+  // terrain x,y (0-49) -> grid cell (0-49 for 50x50 map)
   const coordToGrid = (x: number, y: number) => ({
-    gridX: Math.floor(x / 5),
-    gridY: Math.floor(y / 5)
+    gridX: Math.floor(x),
+    gridY: Math.floor(y)
   });
 
   // Convert grid cell to SVG display
   const gridToSvg = (gridX: number, gridY: number) => ({
-    x: gridX * 5 + 2.5,
-    y: gridY * 5 + 2.5
+    x: gridX + 0.5,
+    y: gridY + 0.5
   });
 
   // Convert unit coordinates to grid, then to SVG (same as terrain)
-  // Unit coordinates are in grid scale (0-20), terrain uses 50x50, need same conversion
   const unitToSvg = (x: number, y: number) => {
-    // Use same formula as terrain: divide by 5 to get grid cell
-    const gridX = Math.floor(x / 5);
-    const gridY = Math.floor(y / 5);
+    // Use same formula as terrain: direct mapping for 50x50 map
+    const gridX = Math.floor(x);
+    const gridY = Math.floor(y);
     return gridToSvg(gridX, gridY);
   };
 
@@ -279,76 +526,48 @@ export default function GamePage() {
               className="w-full h-full"
               style={{
                 background: gameState.is_night ? '#0f172a' : '#1e293b',
-                transform: `scale(${zoom})`,
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
                 transformOrigin: 'center center',
-                transition: 'transform 0.1s ease-out'
+                willChange: 'transform',
+                transition: isPanning ? 'none' : 'transform 0.1s ease-out',
+                cursor: isPanning ? 'grabbing' : 'grab'
               }}
               onWheel={handleWheel}
+              onMouseDown={handlePanStart}
+              onMouseMove={handlePan}
+              onMouseUp={handlePanEnd}
+              onMouseLeave={handlePanEnd}
+              onClick={() => setTerrainTooltip(null)}
             >
-              {/* Grid - fixed subtle grid lines */}
-              {[...Array(11)].map((_, i) => (
-                <g key={`grid-${i}`}>
-                  <line x1={i * 5} y1="0" x2={i * 5} y2="50" stroke="#1e293b" strokeWidth="0.15" />
-                  <line x1="0" y1={i * 5} x2="50" y2={i * 5} stroke="#1e293b" strokeWidth="0.15" />
+              {/* Grid - optimized with single path elements */}
+              <path d={gridLines.minorPath} stroke="#334155" strokeWidth="0.08" fill="none" />
+              <path d={gridLines.majorPath} stroke="#1e293b" strokeWidth="0.15" fill="none" />
+              {/* Terrain - use memoized data with click for tooltip */}
+              {terrainElements.map((t) => t && (
+                <g key={t.key} onClick={(e) => {
+                  e.stopPropagation();
+                  const terrainKey = t.terrainType || 'plain';
+                  const info = gameState?.terrain_info?.[terrainKey];
+                  if (info) {
+                    setTerrainTooltip({ x: e.clientX, y: e.clientY, terrain: terrainKey, info });
+                  }
+                }} style={{ cursor: 'pointer' }}>
+                  <rect x={t.svgX - 0.4} y={t.svgY - 0.4} width="0.8" height="0.8" fill={t.info.color} opacity="0.5" />
+                  <text x={t.svgX} y={t.svgY + 0.3} fontSize="0.8" fill="#fff" textAnchor="middle" opacity="0.9">{t.info.symbol}</text>
                 </g>
               ))}
-              {/* Terrain - deduplicate by grid cell */}
-              {(() => {
-                const terrainByGrid: Record<string, { key: string; terrainType: string }> = {};
-                // Group terrain by grid cell (use first non-plain terrain per cell)
-                Object.entries(gameState.terrain).forEach(([key, terrainType]) => {
-                  const [x, y] = key.split(',').map(Number);
-                  const { gridX, gridY } = coordToGrid(x, y);
-                  const gridKey = `${gridX},${gridY}`;
-                  // Only keep first non-plain terrain for each grid cell
-                  if (!terrainByGrid[gridKey] && terrainType !== 'plain') {
-                    terrainByGrid[gridKey] = { key, terrainType };
-                  }
-                });
-                return Object.values(terrainByGrid).map(({ key, terrainType }) => {
-                  const [x, y] = key.split(',').map(Number);
-                  const { gridX, gridY } = coordToGrid(x, y);
-                  const { x: svgX, y: svgY } = gridToSvg(gridX, gridY);
-                  const info = gameState.terrain_info?.[terrainType];
-                  if (!info) return null;
-                  return (
-                    <g key={`terrain-${key}`}>
-                      <rect x={svgX - 2.25} y={svgY - 2.25} width="4.5" height="4.5" fill={info.color} opacity="0.5" />
-                      <text x={svgX} y={svgY + 1.5} fontSize="4" fill="#fff" textAnchor="middle" opacity="0.9">{info.symbol}</text>
-                    </g>
-                  );
-                });
-              })()}
-              {/* Units - NATO symbols */}
-              {gameState.units.map((unit) => {
-                // Unit coordinates are in grid scale (0-20), convert using same formula as terrain
-                const { x: svgX, y: svgY } = unitToSvg(unit.x, unit.y);
-                const sideColor = getSideColor(unit.side);
-                const symbol = getNatoSymbol(unit.type);
-                const isSelected = selectedUnit?.id === unit.id;
-                return (
-                  <g key={unit.id} onClick={() => setSelectedUnit(unit)} style={{ cursor: 'pointer' }}>
-                    {/* Unit frame - NATO style rectangle */}
-                    <rect x={svgX - 2.2} y={svgY - 1.8} width="4.4" height="3.6" fill={sideColor} stroke={isSelected ? '#fff' : 'none'} strokeWidth="0.3" opacity="0.95"/>
-                    {/* NATO symbol inside - simplified without transform */}
-                    <text x={svgX} y={svgY + 0.5} fontSize="3" fill="#fff" textAnchor="middle" fontWeight="bold">
-                      {unit.type === 'infantry' ? '✕' : unit.type === 'armor' ? '⇒' : unit.type === 'artillery' ? '+' : unit.type === 'reconnaissance' ? '◇' : unit.type === 'combined_arms' ? '■' : '✕'}
-                    </text>
-                    {/* Unit name */}
-                    <text x={svgX + 3} y={svgY + 3} fontSize="2" fill="#fff" fontWeight="bold">{unit.name}</text>
-                    {/* Status indicator */}
-                    <rect x={svgX + 1.5} y={svgY + 1.5} width="1" height="0.8" fill={getStatusColor(unit.status)} stroke="#000" strokeWidth="0.1"/>
-                  </g>
-                );
-              })}
+              {/* Units - use memoized UnitMarker component */}
+              {unitList.map((unit) => (
+                <UnitMarker key={unit.id} unit={unit} selectedUnitId={selectedUnit?.id || null} onSelect={handleUnitSelect} />
+              ))}
             </svg>
           </div>
 
           {/* Map Controls (outside clipped area) - modern glass style */}
           <div className="absolute top-3 right-3 flex flex-col gap-1.5 z-10">
-            <button onClick={() => setZoom(z => Math.min(3, z + 0.2))} aria-label="マップをzoom in" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-lg font-bold transition-colors border border-gray-600/30">+</button>
-            <button onClick={() => setZoom(z => Math.max(0.5, z - 0.2))} aria-label="マップをzoom out" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-lg font-bold transition-colors border border-gray-600/30">−</button>
-            <button onClick={() => setZoom(1)} aria-label="ズームをリセット" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30">Reset</button>
+            <button onClick={handleZoomIn} aria-label="マップをzoom in" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-lg font-bold transition-colors border border-gray-600/30">+</button>
+            <button onClick={handleZoomOut} aria-label="マップをzoom out" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-lg font-bold transition-colors border border-gray-600/30">−</button>
+            <button onClick={handleZoomReset} aria-label="ズームをリセット" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30">Reset</button>
           </div>
 
           {/* Map Info - modern style */}
@@ -357,6 +576,25 @@ export default function GamePage() {
             <span className="text-red-400 font-medium">敵軍: {gameState.units.filter(u => u.side === 'enemy').length}</span>
             <span className="text-gray-400">ズーム: {Math.round(zoom * 100)}%</span>
           </div>
+
+          {/* Terrain Tooltip */}
+          {terrainTooltip && (
+            <div
+              className="fixed z-50 bg-gray-900/95 backdrop-blur p-3 rounded-lg text-xs border border-gray-600/50 shadow-xl"
+              style={{
+                left: terrainTooltip.x + 15,
+                top: terrainTooltip.y + 15,
+                pointerEvents: 'none'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-lg" style={{ color: terrainTooltip.info.color }}>{terrainTooltip.info.symbol}</span>
+                <span className="font-bold text-gray-100">{terrainTooltip.info.name}</span>
+              </div>
+              <div className="text-gray-400 text-[10px]">クリックで情報表示</div>
+            </div>
+          )}
         </div>
 
         {/* Right: Orders + Logs - expanded to 320px */}
@@ -441,7 +679,7 @@ export default function GamePage() {
                     <div className="font-bold text-yellow-400 text-[10px] mb-1">T{log.turn}</div>
                     {log.orders.map((order, i) => (
                       <div key={i} className="flex items-center gap-2 py-0.5">
-                        <span>{getOutcomeIcon(order.outcome)}</span>
+                        <span>{getOutcomeIcon(order.outcome, order.unit)}</span>
                         <span className="text-gray-300 truncate">{order.unit}</span>
                       </div>
                     ))}
@@ -454,9 +692,12 @@ export default function GamePage() {
           </div>
 
           {/* Advance Turn */}
-          <div className="p-3 border-t border-gray-700/50 shrink-0 bg-gray-800/50">
+          <div className="p-3 border-t border-gray-700/50 shrink-0 bg-gray-800/50 space-y-2">
             <button onClick={advanceTurn} disabled={loading} aria-label="ターン進行" className="w-full bg-purple-600/80 hover:bg-purple-600 disabled:bg-gray-600/50 rounded-lg p-3 text-sm font-bold transition-all shadow-lg shadow-purple-900/30">
               ▶ ターン進行
+            </button>
+            <button onClick={endGame} aria-label="ゲームを終了" className="w-full bg-red-900/50 hover:bg-red-800/50 border border-red-700/50 rounded-lg p-2 text-xs font-medium transition-colors">
+              End Mission / Debriefing
             </button>
           </div>
         </div>
@@ -494,5 +735,17 @@ export default function GamePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function GamePage() {
+  return (
+    <Suspense fallback={
+      <div className="h-screen bg-gray-900 flex items-center justify-center text-white">
+        Loading...
+      </div>
+    }>
+      <GameContent />
+    </Suspense>
   );
 }

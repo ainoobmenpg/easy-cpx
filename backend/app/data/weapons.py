@@ -13,6 +13,7 @@ class UnitCategory(Enum):
     AIRCRAFT = "aircraft"
     RECON = "recon"
     SUPPORT = "support"
+    UAV = "uav"  # Unmanned Aerial Vehicle - reconnaissance only
 
 
 class Side(Enum):
@@ -278,6 +279,40 @@ class EquipmentDatabase:
             "crew": 2,
             "notes": "Ground attack & air superiority",
         },
+
+        # UAV - Unmanned Aerial Vehicles (Modern scenario only)
+        "rq7_shadow": {
+            "name": "RQ-7 Shadow",
+            "category": UnitCategory.UAV,
+            "side": Side.NATO,
+            "nation": "USA",
+            "year": 2026,
+            "combat_strength": 0,  # Reconnaissance only
+            "armor": 0,
+            "speed_kmh": 200,
+            "range_km": 250,
+            "endurance_hours": 6,
+            "recon_value": 1.5,  # Bonus to reconnaissance
+            "visibility_range": 8,  # Large visibility radius
+            "crew": 0,  # Unmanned
+            "notes": "Tactical UAV for reconnaissance and surveillance",
+        },
+        "mq9_reaper": {
+            "name": "MQ-9 Reaper",
+            "category": UnitCategory.UAV,
+            "side": Side.NATO,
+            "nation": "USA",
+            "year": 2026,
+            "combat_strength": 30,  # Can carry weapons
+            "armor": 10,
+            "speed_kmh": 370,
+            "range_km": 1850,
+            "endurance_hours": 27,
+            "recon_value": 1.8,  # High recon value
+            "visibility_range": 10,
+            "crew": 0,
+            "notes": "Medium-altitude long-endurance UAV",
+        },
     }
 
     # Warsaw Pact Equipment
@@ -523,6 +558,24 @@ class EquipmentDatabase:
             "crew": 1,
             "notes": "Close air support",
         },
+
+        # UAV - Enemy side (Modern scenario)
+        "forpost": {
+            "name": "Forpost",
+            "category": UnitCategory.UAV,
+            "side": Side.WP,
+            "nation": "Russia",
+            "year": 2026,
+            "combat_strength": 0,
+            "armor": 0,
+            "speed_kmh": 180,
+            "range_km": 400,
+            "endurance_hours": 8,
+            "recon_value": 1.3,
+            "visibility_range": 7,
+            "crew": 0,
+            "notes": "Russian tactical UAV",
+        },
     }
 
     @classmethod
@@ -563,8 +616,13 @@ class EquipmentDatabase:
 
 
 # Unit type mapping to equipment
+# Includes infantry subtypes: standard, atgm, sniper, scout
 UNIT_TYPE_EQUIPMENT_MAP = {
-    "nato_infantry": ["m1_abrams", "m2_bradley"],
+    # NATO units
+    "nato_infantry_standard": ["m1_abrams", "m2_bradley"],  # placeholder for infantry
+    "nato_infantry_atgm": ["m1_abrams", "m2_bradley"],  # ATGM teams
+    "nato_infantry_sniper": ["m1_abrams", "m2_bradley"],  # Sniper teams
+    "nato_infantry_scout": ["m1_abrams", "m2_bradley"],  # Scout teams
     "nato_armor": ["m1_abrams", "leopard_2"],
     "nato_artillery": ["m109", "mlrs"],
     "nato_air_defense": ["patriot", "flakpanzer"],
@@ -572,8 +630,14 @@ UNIT_TYPE_EQUIPMENT_MAP = {
     "nato_transport_helo": ["uh60_blackhawk"],
     "nato_air_superiority": ["f15_eagle"],
     "nato_multirole": ["f16_fighting_falcon", "tornado"],
+    "nato_uav": ["rq7_shadow", "mq9_reaper"],
+    "nato_recon": ["m1_abrams", "m2_bradley"],  # Recon units
 
-    "wp_infantry": ["t72", "bmp2"],
+    # Warsaw Pact units
+    "wp_infantry_standard": ["t72", "bmp2"],
+    "wp_infantry_atgm": ["t72", "bmp2"],
+    "wp_infantry_sniper": ["t72", "bmp2"],
+    "wp_infantry_scout": ["t72", "bmp2"],
     "wp_armor": ["t72", "t80"],
     "wp_artillery": ["bm21", "2s19"],
     "wp_air_defense": ["sa11", "sa6"],
@@ -581,4 +645,6 @@ UNIT_TYPE_EQUIPMENT_MAP = {
     "wp_transport_helo": ["mi17"],
     "wp_air_superiority": ["mig29"],
     "wp_ground_attack": ["mig27", "su25"],
+    "wp_uav": ["forpost"],
+    "wp_recon": ["t72", "bmp2"],
 }

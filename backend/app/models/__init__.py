@@ -39,6 +39,50 @@ class OrderLevel(enum.Enum):
     STRATEGIC = "strategic"  # Strategic: mobilization, war start, deterrence, info warfare
 
 
+class InfantrySubtype(enum.Enum):
+    STANDARD = "standard"  # Standard infantry, no special bonuses
+    ATGM = "atgm"  # Anti-tank missile infantry, +0.3 vs armor
+    SNIPER = "sniper"  # Sniper teams, +2 range, higher hit probability
+    SCOUT = "scout"  # Scout infantry, +0.2 recon, provides recon support
+
+
+# Infantry subtype bonuses and attributes
+INFANTRY_SUBTYPE_ATTRIBUTES = {
+    InfantrySubtype.STANDARD: {
+        "name": "標準歩兵",
+        "combat_bonus": 0.0,
+        "recon_bonus": 0.0,
+        "range_bonus": 0,
+    },
+    InfantrySubtype.ATGM: {
+        "name": "対戦車导弹兵",
+        "combat_bonus": 0.3,  # vs armor
+        "recon_bonus": 0.0,
+        "range_bonus": 1,
+    },
+    InfantrySubtype.SNIPER: {
+        "name": "狙撃手",
+        "combat_bonus": 0.2,  # vs infantry (higher hit rate)
+        "recon_bonus": 0.1,
+        "range_bonus": 2,
+    },
+    InfantrySubtype.SCOUT: {
+        "name": "偵察兵",
+        "combat_bonus": 0.0,
+        "recon_bonus": 0.2,
+        "range_bonus": 0,
+    },
+}
+
+
+# Extended reconnaissance confidence levels
+class ReconConfidence(enum.Enum):
+    CONFIRMED = "confirmed"     # Precisely located, type verified
+    ESTIMATED = "estimated"    # Approximate position, type uncertain
+    UNKNOWN = "unknown"        # Presence unknown
+    FALSE = "false"            # Known to be false
+
+
 class Game(Base):
     __tablename__ = "games"
 
@@ -46,11 +90,12 @@ class Game(Base):
     name = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     current_turn = Column(Integer, default=1)
-    current_date = Column(String, default="1985-11-22")  # Historical Cold War scenario date
-    current_time = Column(String, default="06:00")
+    current_date = Column(String, default="2026-03-06")  # Default scenario date
+    current_time = Column(String, default="05:40")
     weather = Column(String, default="clear")
     phase = Column(String, default="orders")  # orders, adjudication, sitrep
     is_active = Column(Boolean, default=True)
+    scenario_id = Column(String, nullable=True)  # Scenario ID for this game
 
     units = relationship("Unit", back_populates="game")
     turns = relationship("Turn", back_populates="game")
@@ -73,12 +118,34 @@ class Unit(Base):
     readiness = Column(Enum(SupplyLevel), default=SupplyLevel.FULL)
     strength = Column(Integer, default=100)  # 0-100
 
+    # Infantry subtype for specialized infantry units
+    infantry_subtype = Column(String, nullable=True)  # standard, atgm, sniper, scout
+    # Unit reconnaissance and visibility attributes
+    recon_value = Column(Float, default=1.0)  # Base reconnaissance value
+    visibility_range = Column(Integer, default=3)  # Base visibility range in cells
+    # Observation tracking (for Fog of War)
+    observation_confidence = Column(String, nullable=True)  # confirmed, estimated, unknown
+    last_observed_turn = Column(Integer, nullable=True)
+
+    # Extended reconnaissance tracking (new fields)
+    # Detailed confidence score (0-100)
+    confidence_score = Column(Integer, nullable=True)
+    # Estimated position (for estimated/unknown)
+    estimated_x = Column(Float, nullable=True)
+    estimated_y = Column(Float, nullable=True)
+    # Position accuracy in cells (higher = less accurate)
+    position_accuracy = Column(Integer, default=0)
+    # Last known type (may be different from actual)
+    last_known_type = Column(String, nullable=True)
+    # Observation sources (which unit observed)
+    observation_sources = Column(JSON, nullable=True)
+
     # Extended resources (for advanced resource management)
     interceptors = Column(Integer, default=0)  # Air defense missiles
     precision_munitions = Column(Integer, default=0)  # Guided munitions
 
     game = relationship("Game", back_populates="units")
-    order = relationship("Order", back_populates="unit", uselist=False)
+    orders = relationship("Order", back_populates="unit")  # 1:N for turn history
 
 
 class Turn(Base):
@@ -123,7 +190,7 @@ class Order(Base):
     outcome = Column(String)  # success, partial, failed, blocked, cancelled
 
     game = relationship("Game", back_populates="orders")
-    unit = relationship("Unit", back_populates="order")
+    unit = relationship("Unit", back_populates="orders")  # Updated to match Unit.orders
     turn = relationship("Turn", back_populates="orders")
 
 
@@ -155,11 +222,44 @@ class PlayerKnowledge(Base):
 
     # Knowledge level
     confidence = Column(String)  # confirmed, estimated, unknown
+    confidence_score = Column(Integer, default=0)  # 0-100 percentage
     last_observed_turn = Column(Integer)
 
     # Player's interpretation
     interpreted_type = Column(String)
     interpreted_side = Column(String)
+
+    # Position accuracy
+    position_accuracy = Column(Integer, default=0)  # cells of error
+
+
+# Enemy Knowledge - What enemy knows about player units
+# This tracks enemy reconnaissance and information control
+class EnemyKnowledge(Base):
+    __tablename__ = "enemy_knowledge"
+
+    id = Column(Integer, primary_key=True, index=True)
+    game_id = Column(Integer, ForeignKey("games.id"))
+
+    # What the enemy knows about player unit
+    player_unit_id = Column(Integer, ForeignKey("units.id"), nullable=True)
+
+    # Known position (may be different from true position due to fog of war)
+    known_x = Column(Float, nullable=True)
+    known_y = Column(Float, nullable=True)
+    area_name = Column(String, nullable=True)
+
+    # Knowledge level
+    confidence = Column(String)  # confirmed, estimated, unknown
+    confidence_score = Column(Integer, default=0)  # 0-100 percentage
+    last_observed_turn = Column(Integer)
+
+    # Enemy's interpretation (may be wrong)
+    interpreted_type = Column(String, nullable=True)
+    is_deceptive = Column(Boolean, default=False)  # Player has set a decoy
+
+    # Position accuracy
+    position_accuracy = Column(Integer, default=0)  # cells of error
 
 
 # Commander Order - High-level command intent
