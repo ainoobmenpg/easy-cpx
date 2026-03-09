@@ -14,6 +14,30 @@
 
 ### 優先度：バグ修正
 
+- [x] 破壊されたユニットのアクティビティバグを修正 `cc:完了` (2026-03-09)
+  - 修正: turn处理ループでdestroyedユニットをスキップ
+  - ファイル: `backend/app/services/adjudication.py`
+
+- [x] 敵AIのターゲット選択ロジックを修正 `cc:完了` (2026-03-09)
+  - 修正: `_get_nearest_enemy_position`でdestroyedユニットを除外
+  - ファイル: `backend/app/services/excon_ai.py`
+
+- [x] 戦闘成功率の極端な変動を修正 `cc:完了` (2026-03-09)
+  - 修正: 成功率閾値を調整し、よりバランス良く
+  - ファイル: `backend/app/services/adjudication.py`
+
+- [x] ゲーム終了条件の実装 `cc:完了` (2026-03-09)
+  - 修正: 全滅判定とis_active更新を追加
+  - ファイル: `backend/app/services/adjudication.py`
+
+- [x] SITREPのターン表示バグを修正 `cc:完了` (2026-03-09)
+  - 修正: turnパラメータが正しく使用されるように修正
+  - ファイル: `backend/app/api/routes.py`
+
+- [x] ユニット数表示の正確性を改善 `cc:完了` (2026-03-09)
+  - 修正: destroyされたユニットをカウントから除外
+  - ファイル: `backend/app/services/sitrep_generator.py`
+
 - [x] 地形アイコン表示の修正 `cc:完了` (2026-03-09)
   - 平地(plain)はアイコンを表示しない（コードでは既に対応済み）
   - ファイル: `frontend/app/game/page.tsx`
@@ -48,6 +72,18 @@
   - 戦闘結果ログ（攻撃側、防衛側、ダメージ）
   - 偵察ログ（観測されたユニット、確度）
   - ファイル: `backend/app/services/adjudication.py`, `backend/app/services/excon_ai.py`
+
+### 優先度：テスト実装
+
+- [x] テストカバレッジを79%に向上 `cc:完了` (2026-03-09)
+  - 結果: 59% → 79%（+20%）
+  - 追加したテストファイル:
+    - test_ai_client.py (新規)
+    - test_scenario_manager.py (新規)
+    - test_debriefing.py (新規)
+    - test_unit_profiles.py (新規)
+    - test_adjudication.py (拡張)
+  - テスト数: 96 → 281（+185）
 
 ### 優先度：パフォーマンス最適化
 

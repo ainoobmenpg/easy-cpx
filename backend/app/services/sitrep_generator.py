@@ -149,15 +149,18 @@ class SITREPGenerator:
         """Generate the overview section"""
         weather_desc = self._get_weather_description(weather)
 
-        # Count units by status
-        friendly_intact = sum(1 for u in friendly_units if u.get("status") == "intact")
-        enemy_intact = sum(1 for u in enemy_units if u.get("status") == "intact")
+        # Valid unit statuses (excluding destroyed)
+        valid_statuses = ["intact", "light_damage", "medium_damage", "heavy_damage"]
+
+        # Count valid units (excluding destroyed)
+        friendly_valid = sum(1 for u in friendly_units if u.get("status") in valid_statuses)
+        enemy_valid = sum(1 for u in enemy_units if u.get("status") in valid_statuses)
 
         lines = [
             f"ターン {turn} - {time_str}",
             f"天候: {weather_desc}",
-            f"味方は{friendly_intact}/{len(friendly_units)}個師団が作戦可能",
-            f"敵は{enemy_intact}/{len(enemy_units)}個師団が行動可能"
+            f"味方は{friendly_valid}/{len(friendly_units)}個師団が作戦可能",
+            f"敵は{enemy_valid}/{len(enemy_units)}個師団が行動可能"
         ]
 
         return "\n".join(lines)

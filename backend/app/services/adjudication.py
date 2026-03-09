@@ -203,10 +203,12 @@ class AdjudicationCriteria:
             "description": cls.CONDITIONS["readiness_bonus"]["description"]
         }
 
-        # Calculate weighted score
+        # Calculate weighted score with caps to prevent extreme values
         total_weight = sum(c["weight"] for c in cls.CONDITIONS.values())
+        # Cap individual scores at 1.0 to prevent overweighting
+        capped_scores = {cond: min(results[cond]["score"], 1.0) for cond in results}
         weighted_score = sum(
-            results[cond]["score"] * cls.CONDITIONS[cond]["weight"]
+            capped_scores[cond] * cls.CONDITIONS[cond]["weight"]
             for cond in results
         ) / total_weight
 
@@ -214,21 +216,21 @@ class AdjudicationCriteria:
         conditions_met = sum(1 for r in results.values() if r["met"])
         total_conditions = len(results)
 
-        # Determine if attacker has superior position
-        is_superior = weighted_score >= 0.7 and conditions_met >= 5
-        is_inferior = weighted_score < 0.5 or conditions_met < 3
+        # Determine if attacker has superior position - adjust thresholds for more balanced outcomes
+        is_superior = weighted_score >= 0.5 and conditions_met >= 4
+        is_inferior = weighted_score < 0.35 or conditions_met < 3
 
-        # 5-stage outcome determination
-        if is_superior and conditions_met >= 5:
+        # 5-stage outcome determination with more balanced thresholds
+        if is_superior and conditions_met >= 6:
             outcome = "perfect_success"
-        elif is_superior and conditions_met >= 4:
+        elif is_superior and conditions_met >= 5:
             outcome = "success"
-        elif is_superior and conditions_met >= 3:
+        elif weighted_score >= 0.4:
             outcome = "partial"
-        elif is_inferior and conditions_met >= 3:
-            outcome = "failed"
-        else:  # is_inferior and conditions_met < 3
+        elif is_inferior or weighted_score < 0.25:
             outcome = "major_failed"
+        else:
+            outcome = "failed"
 
         return outcome, results
 
@@ -329,10 +331,18 @@ class RuleEngine:
         # Process enemy reconnaissance - what enemy knows about player units
         enemy_recon_events = self._process_enemy_reconnaissance(game_id)
 
+        # Check game end conditions
+        game_end = self._check_game_end_conditions(game_id)
+
         # Update turn phase
         turn.phase = "complete"
         game.current_turn += 1
         game.current_time = self._advance_time(game.current_time)
+
+        # If game ended, update game status
+        if game_end["ended"]:
+            game.is_active = False
+
         self.db.commit()
 
         return {
@@ -341,8 +351,38 @@ class RuleEngine:
             "events": enemy_events,
             "recon_events": recon_events,
             "enemy_recon_events": enemy_recon_events,
-            "next_time": game.current_time
+            "next_time": game.current_time,
+            "game_ended": game_end["ended"],
+            "game_end_reason": game_end["reason"]
         }
+
+    def _check_game_end_conditions(self, game_id: int) -> dict:
+        """Check if game end conditions are met"""
+        game = self.db.query(Game).filter(Game.id == game_id).first()
+        if not game:
+            return {"ended": False, "reason": None}
+
+        # Check turn limit (50 turns)
+        if game.current_turn >= 50:
+            logger.info(f"[GAME END] Turn limit reached: {game.current_turn}")
+            return {"ended": True, "reason": "turn_limit"}
+
+        # Get all units
+        units = self.db.query(Unit).filter(Unit.game_id == game_id).all()
+
+        # Count player and enemy units that are not destroyed
+        player_units = [u for u in units if u.side == "player" and u.status != UnitStatus.DESTROYED]
+        enemy_units = [u for u in units if u.side == "enemy" and u.status != UnitStatus.DESTROYED]
+
+        # Check for annihilation
+        if not player_units:
+            logger.info("[GAME END] Player forces annihilated")
+            return {"ended": True, "reason": "player_annihilated"}
+        if not enemy_units:
+            logger.info("[GAME END] Enemy forces annihilated")
+            return {"ended": True, "reason": "enemy_annihilated"}
+
+        return {"ended": False, "reason": None}
 
     def _adjudicate_order(self, order: Order) -> dict:
         """Adjudicate a single order"""
@@ -566,12 +606,14 @@ class RuleEngine:
 
         enemy_units = self.db.query(Unit).filter(
             Unit.game_id == game_id,
-            Unit.side == "enemy"
+            Unit.side == "enemy",
+            Unit.status != UnitStatus.DESTROYED
         ).all()
 
         player_units = self.db.query(Unit).filter(
             Unit.game_id == game_id,
-            Unit.side == "player"
+            Unit.side == "player",
+            Unit.status != UnitStatus.DESTROYED
         ).all()
 
         logger.info(f"[ENEMY] Processing {len(enemy_units)} enemy units vs {len(player_units)} player units")
@@ -602,6 +644,11 @@ class RuleEngine:
         events = []
 
         for unit in enemy_units:
+            # Skip destroyed units
+            if unit.status == UnitStatus.DESTROYED:
+                logger.debug(f"[ENEMY] Skipping destroyed unit: {unit.name}")
+                continue
+
             # Get unit behavior profile
             profile = get_unit_profile(unit.unit_type)
 
@@ -970,16 +1017,18 @@ class RuleEngine:
         """
         import math
 
-        # Get player units with reconnaissance capability
+        # Get player units with reconnaissance capability (exclude destroyed)
         player_units = self.db.query(Unit).filter(
             Unit.game_id == game_id,
-            Unit.side == "player"
+            Unit.side == "player",
+            Unit.status != UnitStatus.DESTROYED
         ).all()
 
-        # Get enemy units
+        # Get enemy units (exclude destroyed)
         enemy_units = self.db.query(Unit).filter(
             Unit.game_id == game_id,
-            Unit.side == "enemy"
+            Unit.side == "enemy",
+            Unit.status != UnitStatus.DESTROYED
         ).all()
 
         logger.info(f"[RECON] Player units: {len(player_units)}, Enemy units: {len(enemy_units)}")
@@ -1170,16 +1219,18 @@ class RuleEngine:
         """
         import math
 
-        # Get enemy units with reconnaissance capability
+        # Get enemy units with reconnaissance capability (exclude destroyed)
         enemy_units = self.db.query(Unit).filter(
             Unit.game_id == game_id,
-            Unit.side == "enemy"
+            Unit.side == "enemy",
+            Unit.status != UnitStatus.DESTROYED
         ).all()
 
-        # Get player units
+        # Get player units (exclude destroyed)
         player_units = self.db.query(Unit).filter(
             Unit.game_id == game_id,
-            Unit.side == "player"
+            Unit.side == "player",
+            Unit.status != UnitStatus.DESTROYED
         ).all()
 
         # Get game state

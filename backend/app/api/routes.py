@@ -7,6 +7,8 @@ from app.database import get_db
 from app.models import Game, Unit, Turn, Order, OrderType
 from app.services.adjudication import RuleEngine
 from app.services.ai_client import AIClient
+from app.services.scenario_manager import ScenarioManager
+from app.services.debriefing import DebriefingGenerator
 import asyncio
 
 router = APIRouter()
@@ -212,6 +214,9 @@ async def advance_turn(request: TurnAdvanceRequest, db: Session = Depends(get_db
     # Generate enemy orders
     excon_orders = await ai.generate_excon_orders(game_state)
 
+    # Process enemy orders using the rule engine
+    enemy_results = engine.process_enemy_orders(request.game_id, excon_orders)
+
     # Save to turn
     turn = db.query(Turn).filter(
         Turn.game_id == request.game_id,
@@ -227,6 +232,7 @@ async def advance_turn(request: TurnAdvanceRequest, db: Session = Depends(get_db
         "turn": result.get("turn"),
         "results": result.get("results"),
         "events": result.get("events"),
+        "enemy_results": enemy_results,
         "sitrep": sitrep,
         "next_time": result.get("next_time")
     }
@@ -243,18 +249,107 @@ def get_game_state(game_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/game/{game_id}/sitrep")
-def get_sitrep(game_id: int, db: Session = Depends(get_db)):
-    """Get latest SITREP"""
+def get_sitrep(game_id: int, turn: int = None, db: Session = Depends(get_db)):
+    """Get SITREP for specified turn or latest available"""
     game = db.query(Game).filter(Game.id == game_id).first()
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
 
+    target_turn = turn if turn is not None else game.current_turn - 1
     turn = db.query(Turn).filter(
         Turn.game_id == game_id,
-        Turn.turn_number == game.current_turn - 1
+        Turn.turn_number == target_turn
     ).first()
 
     if not turn or not turn.sitrep:
         return {"message": "No SITREP available yet"}
 
     return turn.sitrep
+
+
+class MoveUnitRequest(BaseModel):
+    x: float
+    y: float
+
+
+@router.post("/units/{unit_id}/move")
+def move_unit(unit_id: int, request: MoveUnitRequest, db: Session = Depends(get_db)):
+    """Move unit to new position (drag and drop)"""
+    unit = db.query(Unit).filter(Unit.id == unit_id).first()
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unit not found")
+
+    # Update position (in grid scale 0-50)
+    unit.x = request.x
+    unit.y = request.y
+    db.commit()
+    db.refresh(unit)
+
+    return {"success": True, "unit_id": unit_id, "x": unit.x, "y": unit.y}
+
+
+# Scenario endpoints
+@router.get("/scenarios")
+def get_scenarios():
+    """Get list of all available scenarios"""
+    manager = ScenarioManager()
+    return manager.load_scenarios()
+
+
+@router.get("/scenarios/{scenario_id}")
+def get_scenario(scenario_id: str):
+    """Get detailed scenario by ID"""
+    manager = ScenarioManager()
+    scenario = manager.get_scenario(scenario_id)
+    if not scenario:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    return scenario
+
+
+class GameStartRequest(BaseModel):
+    scenario_id: str
+    game_name: str
+
+
+@router.post("/game/start")
+def start_game(request: GameStartRequest, db: Session = Depends(get_db)):
+    """Start a new game from a scenario"""
+    manager = ScenarioManager()
+    try:
+        result = manager.create_game_from_scenario(
+            request.scenario_id,
+            request.game_name,
+            db
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# Debriefing endpoints
+@router.get("/game/{game_id}/debriefing")
+async def get_debriefing(game_id: int, db: Session = Depends(get_db)):
+    """Get debriefing report for a game"""
+    game = db.query(Game).filter(Game.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    generator = DebriefingGenerator()
+    return await generator.generate_debriefing(game_id, db)
+
+
+class EndGameRequest(BaseModel):
+    game_id: int
+
+
+@router.post("/game/end")
+def end_game(request: EndGameRequest, db: Session = Depends(get_db)):
+    """End a game and mark it as inactive"""
+    game = db.query(Game).filter(Game.id == request.game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    game.is_active = False
+    db.commit()
+
+    return {"success": True, "game_id": game.id, "message": "Game ended"}

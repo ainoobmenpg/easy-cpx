@@ -7,6 +7,7 @@ import random
 
 # Import unit profiles for behavior and compatibility
 from app.data.unit_profiles import get_unit_profile, get_compatibility_bonus
+from app.models import UnitStatus
 
 # Configure logger for enemy AI
 ai_logger = logging.getLogger("cpx.ai")
@@ -458,10 +459,18 @@ class ExConAI:
         unit: dict,
         player_units: list[dict]
     ) -> dict:
-        """Get position of nearest player unit"""
+        """Get position of nearest player unit (excluding destroyed units)"""
+        # Filter out destroyed units
+        alive_units = [
+            p for p in player_units
+            if p.get("status") != UnitStatus.DESTROYED.value
+        ]
+        if not alive_units:
+            return {"x": 25, "y": 15}
+
         unit_x, unit_y = unit.get("x", 0), unit.get("y", 0)
         nearest = min(
-            player_units,
+            alive_units,
             key=lambda p: self._distance(unit_x, unit_y, p.get("x", 0), p.get("y", 0)),
             default=None
         )
