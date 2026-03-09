@@ -14,8 +14,18 @@ from app.services.scenario_manager import ScenarioManager
 from app.services.debriefing import DebriefingGenerator
 from app.services.friction_events import FrictionEventService
 import asyncio
+import os
 
 router = APIRouter()
+
+# Security: Flag for internal endpoint access
+ENABLE_INTERNAL_ENDPOINTS = os.getenv("ENABLE_INTERNAL_ENDPOINTS", "false").lower() == "true"
+
+
+def check_internal_access():
+    """Check if internal endpoints are enabled"""
+    if not ENABLE_INTERNAL_ENDPOINTS:
+        raise HTTPException(status_code=401, detail="Internal endpoints are disabled")
 
 
 # Pydantic schemas for request bodies
@@ -208,6 +218,10 @@ def create_order(order: OrderCreate, db: Session = Depends(get_db)):
     if not unit:
         raise HTTPException(status_code=404, detail="Unit not found")
 
+    # Security: Only allow orders for player units
+    if unit.side != "player":
+        raise HTTPException(status_code=403, detail="Cannot submit orders for enemy units")
+
     game = db.query(Game).filter(Game.id == unit.game_id).first()
 
     # Get or create current turn
@@ -347,6 +361,8 @@ def get_true_state(game_id: int, db: Session = Depends(get_db)):
     WARNING: This endpoint exposes all enemy positions, ammo, fuel, etc.
     Only use for debugging, admin panels, or internal services.
     """
+    check_internal_access()  # Security: require ENABLE_INTERNAL_ENDPOINTS=true
+
     game = db.query(Game).filter(Game.id == game_id).first()
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
@@ -370,6 +386,8 @@ def get_internal_units(game_id: int, db: Session = Depends(get_db)):
     WARNING: This exposes all enemy positions and status.
     Only use for debugging or internal services.
     """
+    check_internal_access()  # Security: require ENABLE_INTERNAL_ENDPOINTS=true
+
     game = db.query(Game).filter(Game.id == game_id).first()
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
@@ -589,18 +607,33 @@ async def turn_commit(request: TurnCommitRequest, db: Session = Depends(get_db))
 
 async def _classic_turn_commit(request, db, game, turn):
     """Handle Classic/Simulation mode turn commit"""
+    from sqlalchemy.orm import joinedload
     from app.models import Unit
+
+    # Pre-load all units for validation in one query
+    unit_ids = [o.unit_id for o in request.orders]
+    units_map = {u.id: u for u in db.query(Unit).filter(Unit.id.in_(unit_ids)).all()} if unit_ids else {}
 
     # Create orders from request
     order_results = []
+    orders_to_add = []
     for order_req in request.orders:
-        # Validate unit exists
-        unit = db.query(Unit).filter(Unit.id == order_req.unit_id).first()
+        # Validate unit exists using pre-loaded map
+        unit = units_map.get(order_req.unit_id)
         if not unit:
             order_results.append({
                 "unit_id": order_req.unit_id,
                 "status": "error",
                 "error": "Unit not found"
+            })
+            continue
+
+        # Security: Only allow orders for player units
+        if unit.side != "player":
+            order_results.append({
+                "unit_id": order_req.unit_id,
+                "status": "error",
+                "error": "Cannot submit orders for enemy units"
             })
             continue
 
@@ -616,27 +649,36 @@ async def _classic_turn_commit(request, db, game, turn):
             location_name=order_req.location_name,
             parameters={"priority": order_req.priority} if order_req.priority else None
         )
-        db.add(db_order)
-        db.commit()
-        db.refresh(db_order)
+        orders_to_add.append((order_req, db_order))
 
-        order_results.append({
-            "id": db_order.id,
-            "unit_id": order_req.unit_id,
-            "order_type": order_req.order_type,
-            "status": "submitted"
-        })
+    # Batch insert all orders in one transaction
+    if orders_to_add:
+        db.add_all([o[1] for o in orders_to_add])
+        db.commit()
+
+        # Refresh all orders to get their IDs
+        for order_req, db_order in orders_to_add:
+            db.refresh(db_order)
+            order_results.append({
+                "id": db_order.id,
+                "unit_id": order_req.unit_id,
+                "order_type": order_req.order_type,
+                "status": "submitted"
+            })
 
     # Run adjudication with RuleEngine
     engine = RuleEngine(db)
     ai = AIClient()
     result = engine.adjudicate_turn(request.game_id)
 
-    # Add unit names to results
-    for r in result.get("results", []):
-        order = db.query(Order).filter(Order.id == r.get("order_id")).first()
-        if order:
-            unit = db.query(Unit).filter(Unit.id == order.unit_id).first()
+    # Add unit names to results (optimized with joinedload)
+    order_ids = [r.get("order_id") for r in result.get("results", []) if r.get("order_id")]
+    if order_ids:
+        orders_with_units = db.query(Order).options(joinedload(Order.unit)).filter(Order.id.in_(order_ids)).all()
+        order_unit_map = {o.id: o.unit for o in orders_with_units if o.unit}
+
+        for r in result.get("results", []):
+            unit = order_unit_map.get(r.get("order_id"))
             r["unit_name"] = unit.name if unit else "Unknown"
 
     # Get updated game state
@@ -690,16 +732,30 @@ async def _arcade_turn_commit(request, db, game, turn):
     """Handle Arcade mode turn commit"""
     from app.models import ArcadeUnit
 
+    # Pre-load all arcade units for validation in one query
+    unit_ids = [o.unit_id for o in request.orders]
+    units_map = {u.id: u for u in db.query(ArcadeUnit).filter(ArcadeUnit.id.in_(unit_ids)).all()} if unit_ids else {}
+
     # Create orders from request (for ArcadeUnit)
     order_results = []
+    orders_to_add = []
     for order_req in request.orders:
-        # Validate arcade unit exists
-        unit = db.query(ArcadeUnit).filter(ArcadeUnit.id == order_req.unit_id).first()
+        # Validate arcade unit exists using pre-loaded map
+        unit = units_map.get(order_req.unit_id)
         if not unit:
             order_results.append({
                 "unit_id": order_req.unit_id,
                 "status": "error",
                 "error": "ArcadeUnit not found"
+            })
+            continue
+
+        # Security: Only allow orders for player units
+        if unit.side != "player":
+            order_results.append({
+                "unit_id": order_req.unit_id,
+                "status": "error",
+                "error": "Cannot submit orders for enemy units"
             })
             continue
 
@@ -716,15 +772,21 @@ async def _arcade_turn_commit(request, db, game, turn):
             location_name=order_req.location_name,
             parameters={"priority": order_req.priority} if order_req.priority else None
         )
-        db.add(db_order)
-        db.commit()
-        db.refresh(db_order)
+        orders_to_add.append((order_req, db_order))
 
-        order_results.append({
-            "id": db_order.id,
-            "unit_id": order_req.unit_id,
-            "order_type": order_req.order_type,
-            "status": "submitted"
+    # Batch insert all orders in one transaction
+    if orders_to_add:
+        db.add_all([o[1] for o in orders_to_add])
+        db.commit()
+
+        # Refresh all orders to get their IDs
+        for order_req, db_order in orders_to_add:
+            db.refresh(db_order)
+            order_results.append({
+                "id": db_order.id,
+                "unit_id": order_req.unit_id,
+                "order_type": order_req.order_type,
+                "status": "submitted"
         })
 
     # Run adjudication with ArcadeAdjudication

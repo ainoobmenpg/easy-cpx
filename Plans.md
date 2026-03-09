@@ -86,6 +86,34 @@
 
 ---
 
+## 🟠 新規タスク (Issues #63+)
+
+- [x] Issue #63: Docs: AGENTS.md と実態の同期 `cc:完了`
+  - 依存: なし（ドキュメント）
+  - ToDo: backend 依存インストール手順の明記、`shared/` の役割説明修正、存在しない `npm run test` 記述の是正
+  - 完了: AGENTS.md に `pip install -r requirements.txt` を追加、frontendテスト手順を `npm run lint` + 手動に修正
+  - 参考: docs/issues/issue-63-agents-guide-sync.md
+
+- [x] Issue #64: Security: 内部エンドポイントの無認証公開を遮断 `cc:完了`
+  - 依存: なし（API）
+  - ToDo: `/api/internal/*` に認証/権限チェック or フラグによる無効化を追加し、デプロイでの情報漏えいを防ぐ
+  - 完了: `ENABLE_INTERNAL_ENDPOINTS` 環境変数フラグを追加、false時は401を返すように実装
+  - 参考: docs/issues/issue-64-internal-endpoints-auth.md
+
+- [x] Issue #65: Performance: /turn/commit の DB トランザクション最適化 `cc:完了`
+  - 依存: #55 (turn commit 基盤)
+  - ToDo: Classic/Arcade 双方で order insert をまとめ、N+1 クエリを排除してターン確定時間を短縮
+  - 完了: db.add_all() で一括insert、joinedload で関連データ事前読み込み、1 commitに集約
+  - 参考: docs/issues/issue-65-turn-commit-db-hotloop.md
+
+- [x] Issue #66: Security: /orders API で敵ユニットを操作できる `cc:完了`
+  - 依存: #50 (コマンド整合性)
+  - ToDo: `unit.side` / `game_id` を検証し、プレイヤー以外のユニットには命令を受け付けない
+  - 完了: create_order, _classic_turn_commit, _arcade_turn_commit に unit.side == "player" チェックを追加、違反時は403
+  - 参考: docs/issues/issue-66-enemy-order-forgery.md
+
+---
+
 ## 📦 アーカイブ
 
 ### 2026-03-09 完了分 (Issues #1-49)
