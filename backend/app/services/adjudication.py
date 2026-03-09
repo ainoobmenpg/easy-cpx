@@ -119,9 +119,9 @@ class AdjudicationCriteria:
     # 押し返し(both failed+major_failed) = 20%
     OUTCOME_THRESHOLDS = {
         "perfect_success": {"min_score": 0.85, "min_conditions": 6},  # Breakthrough+ (~5%)
-        "success": {"min_score": 0.70, "min_conditions": 4},           # Breakthrough (~25%)
-        "partial": {"min_score": 0.52, "min_conditions": 3},           # Hold (~50%)
-        "failed": {"min_score": 0.40, "min_conditions": 2},            # Pushback (~15%)
+        "success": {"min_score": 0.73, "min_conditions": 4},           # Breakthrough (~25%)
+        "partial": {"min_score": 0.58, "min_conditions": 3},           # Hold (~50%)
+        "failed": {"min_score": 0.46, "min_conditions": 2},            # Pushback (~15%)
         "major_failed": {"min_score": 0.0, "min_conditions": 0},       # Heavy pushback (~5%)
     }
 
@@ -731,6 +731,81 @@ class RuleEngine:
 
         return final_x, final_y
 
+    def get_reachable_positions_classic(self, unit_id: int) -> dict:
+        """Get all reachable positions for a unit (for movement preview in Classic mode).
+
+        Returns:
+            {
+                "unit_id": int,
+                "unit_name": str,
+                "max_move": float,
+                "reachable": [{"x": float, "y": float, "can_reach": bool, "terrain": str}, ...],
+            }
+        """
+        unit = self.db.query(Unit).filter(Unit.id == unit_id).first()
+        if not unit:
+            return {"error": "Unit not found"}
+
+        # Get game for terrain data
+        game = self.db.query(Game).filter(Game.id == unit.game_id).first()
+        if not game:
+            return {"error": "Game not found"}
+
+        # Get unit movement points (from stats)
+        from app.models import UnitType
+        unit_type = self.db.query(UnitType).filter(UnitType.name == unit.unit_type).first()
+        if not unit_type:
+            max_movement = 10.0  # Default fallback
+        else:
+            max_movement = unit_type.movement
+
+        # Get terrain data
+        terrain_data = game.terrain_data or {}
+
+        # Calculate reachable positions on grid (scaled to 0-50)
+        map_width = game.map_width or 50
+        map_height = game.map_height or 50
+
+        # Sample positions (every 5 units for performance)
+        reachable = []
+        step = 5
+        for x in range(0, map_width + 1, step):
+            for y in range(0, map_height + 1, step):
+                # Skip current position
+                if abs(x - unit.x) < 0.1 and abs(y - unit.y) < 0.1:
+                    continue
+
+                dx = abs(x - unit.x)
+                dy = abs(y - unit.y)
+                distance = dx + dy
+
+                # Get terrain at target
+                terrain_key = f"{int(x/10)},{int(y/10)}"  # Convert to terrain grid
+                terrain_type = terrain_data.get(terrain_key, "plain")
+
+                # Calculate path cost
+                cost = self._calculate_path_cost(game, unit.x, unit.y, x, y)
+                can_reach = cost <= max_movement
+
+                reachable.append({
+                    "x": float(x),
+                    "y": float(y),
+                    "can_reach": can_reach,
+                    "terrain": terrain_type,
+                    "distance": distance,
+                    "cost": cost
+                })
+
+        return {
+            "unit_id": unit.id,
+            "unit_name": unit.name,
+            "unit_type": unit.unit_type,
+            "current_x": unit.x,
+            "current_y": unit.y,
+            "max_move": max_movement,
+            "reachable": reachable,
+        }
+
     def _adjudicate_order(self, order: Order) -> dict:
         # Fetch unit for this order
         unit = self.db.query(Unit).filter(Unit.id == order.unit_id).first()
@@ -932,6 +1007,24 @@ class RuleEngine:
                 "turn": game.current_turn if game else 1,
                 "weather": game.weather if game else "clear"
             }
+
+            # Roll 2D6 for attack and defense (Opposed Roll system)
+            attack_roll = random.randint(1, 6) + random.randint(1, 6)
+            defense_roll = random.randint(1, 6) + random.randint(1, 6)
+
+            # Get base attack/defense ratings from unit type
+            unit_type_base = AdjudicationCriteria.INITIAL_MODIFIERS["unit_type_base"]
+            base_ratings = unit_type_base.get(unit.unit_type.lower() if unit.unit_type else "infantry", {"attack": 2, "defense": 2})
+            attack_rating = base_ratings["attack"]
+            defense_rating = base_ratings["defense"]
+
+            # Calculate diff: (2D6 + Attack Rating) - (2D6 + Defense Rating)
+            attack_total = attack_roll + attack_rating
+            defense_total = defense_roll + defense_rating
+            diff = attack_total - defense_total
+
+            # Log the dice rolls and diff
+            logger.info(f"[COMBAT] {unit.name}: attack_roll={attack_roll}+{attack_rating}={attack_total}, defense_roll={defense_roll}+{defense_rating}={defense_total}, diff={diff} (threshold: CF≤-3, F=-2, P=-1/0, S=+1, G=+2, C≥+3)")
 
             # Use structured adjudication criteria
             outcome, criteria_results = AdjudicationCriteria.evaluate_order(

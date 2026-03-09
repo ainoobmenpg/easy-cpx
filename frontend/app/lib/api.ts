@@ -25,6 +25,10 @@ export const API = {
 
   // Unit endpoints
   moveUnit: (unitId: string | number) => `${API_BASE_URL}/api/units/${toId(unitId)}/move`,
+  unitReachable: (unitId: string | number) => `${API_BASE_URL}/api/units/${toId(unitId)}/reachable`,
+
+  // Turn commit endpoint (batch orders)
+  turnCommit: `${API_BASE_URL}/api/turn/commit`,
 
   // Scenario endpoints
   scenarios: `${API_BASE_URL}/api/scenarios`,

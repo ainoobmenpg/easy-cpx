@@ -147,6 +147,10 @@ function GameContent() {
   const [didPan, setDidPan] = useState(false);  // Track if actual panning occurred
   const [terrainTooltip, setTerrainTooltip] = useState<{ x: number; y: number; terrain: string; info: { name: string; symbol: string; color: string } } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Issue #52: Reachable positions for movement preview
+  const [reachablePositions, setReachablePositions] = useState<{x: number; y: number; can_reach: boolean}[]>([]);
+  // Issue #56: Batch orders for batch submission
+  const [pendingOrders, setPendingOrders] = useState<{unit_id: number; order_type: string; location_x?: number; location_y?: number; target_units?: number[]}[]>([]);
 
   // Resolve gameId from URL param or API
   useEffect(() => {
@@ -234,33 +238,82 @@ function GameContent() {
     setLoading(false);
   };
 
-  // Arcade mode: quick command submission
-  const submitArcadeCommand = async (command: string) => {
-    if (!selectedUnit || gameId === null) return;
+  // Issue #56: Add order to pending batch
+  const addToBatch = (command: string, targetUnitId?: number) => {
+    if (!selectedUnit) return;
+    const orderTypeMap: Record<string, string> = {
+      'move': 'move',
+      'attack': 'attack',
+      'defend': 'defend',
+      'recon': 'recon',
+      'supply': 'supply',
+      'strike': 'special',
+    };
+    const orderType = orderTypeMap[command] || 'move';
+
+    // Check if this unit already has a pending order
+    const existingIndex = pendingOrders.findIndex(o => o.unit_id === selectedUnit.id);
+    const newOrder = {
+      unit_id: selectedUnit.id,
+      order_type: orderType,
+      intent: `Arcade: ${command}`,
+      location_x: targetUnitId ? undefined : (command === 'move' ? selectedUnit.x + 1 : undefined),
+      location_y: targetUnitId ? undefined : (command === 'move' ? selectedUnit.y : undefined),
+      target_units: targetUnitId ? [targetUnitId] : undefined,
+    };
+
+    if (existingIndex >= 0) {
+      // Replace existing order for this unit
+      const updated = [...pendingOrders];
+      updated[existingIndex] = newOrder;
+      setPendingOrders(updated);
+    } else {
+      setPendingOrders([...pendingOrders, newOrder]);
+    }
+  };
+
+  // Issue #56: Submit all pending orders as batch
+  const submitBatchOrders = async () => {
+    if (pendingOrders.length === 0 || gameId === null) return;
     setLoading(true);
     try {
-      // Map arcade commands to order types
-      const orderTypeMap: Record<string, string> = {
-        'move': 'move',
-        'attack': 'attack',
-        'defend': 'defend',
-        'recon': 'recon',
-        'supply': 'supply',
-        'strike': 'special',
-      };
-      const orderType = orderTypeMap[command] || 'move';
-      await fetch(API.orders, {
+      const res = await fetch(API.turnCommit, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          unit_id: selectedUnit.id,
-          order_type: orderType,
-          intent: `Arcade command: ${command}`,
+          game_id: gameId,
+          orders: pendingOrders.map(o => ({
+            unit_id: o.unit_id,
+            order_type: o.order_type,
+            intent: o.intent,
+            location_x: o.location_x,
+            location_y: o.location_y,
+            target_units: o.target_units,
+          }))
         })
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setPendingOrders([]);
       setSelectedUnit(null);
-      fetchGameState();
-    } catch (e) { console.error('Failed to submit arcade command:', e); }
+      setReachablePositions([]);
+      // Update game state with results
+      if (data.results?.units) {
+        setGameState(prev => prev ? { ...prev, units: data.results.units } : null);
+      }
+      // Add turn log
+      setTurnLogs(prev => [{
+        turn: data.turn || gameState?.turn || 1,
+        type: 'orders_result',
+        orders: [{
+          id: 0,
+          unit_name: `${pendingOrders.length} units`,
+          order_type: 'batch',
+          intent: `${pendingOrders.length} orders submitted`,
+          status: 'submitted'
+        }]
+      }, ...prev]);
+    } catch (e) { console.error('Failed to submit batch orders:', e); }
     setLoading(false);
   };
 
@@ -412,11 +465,27 @@ function GameContent() {
     }).filter(Boolean);
   }, [gameState?.terrain, gameState?.terrain_info]);
 
-  // Memoized unit select handler with battle odds calculation
+  // Memoized unit select handler with battle odds calculation and reachable positions
   const handleUnitSelect = useCallback((unit: Unit) => {
     // Don't select unit if user was panning (dragging)
     if (didPan) return;
     setSelectedUnit(unit);
+
+    // Fetch reachable positions for movement preview (Arcade mode)
+    if (unit.side === 'player' && gameMode === 'arcade' && gameId !== null) {
+      fetch(API.unitReachable(unit.id))
+        .then(res => res.json())
+        .then(data => {
+          if (data.reachable) {
+            setReachablePositions(data.reachable.map((r: {x: number, y: number, can_reach: boolean}) => ({
+              x: r.x, y: r.y, can_reach: r.can_reach
+            })));
+          }
+        })
+        .catch(err => console.error('Failed to fetch reachable positions:', err));
+    } else {
+      setReachablePositions([]);
+    }
 
     // Calculate battle odds if player unit selected and enemy in range
     if (unit.side === 'player' && gameState?.units) {
@@ -468,7 +537,7 @@ function GameContent() {
     } else {
       setBattleOdds(null);
     }
-  }, [didPan, gameState?.units]);
+  }, [didPan, gameState?.units, gameMode, gameId]);
 
   // Memoized unit list for rendering
   const unitList = useMemo(() => gameState?.units || [], [gameState?.units]);
@@ -675,6 +744,20 @@ function GameContent() {
                   <rect x={t.svgX - 0.4} y={t.svgY - 0.4} width="0.8" height="0.8" fill={t.info.color} opacity="0.5" />
                   <text x={t.svgX} y={t.svgY + 0.3} fontSize="0.8" fill="#fff" textAnchor="middle" opacity="0.9">{t.info.symbol}</text>
                 </g>
+              ))}
+              {/* Issue #52: Reachable positions preview (movement range) */}
+              {reachablePositions.map((pos, i) => (
+                <circle
+                  key={`reachable-${i}`}
+                  cx={pos.x + 0.5}
+                  cy={pos.y + 0.5}
+                  r="0.35"
+                  fill={pos.can_reach ? "none" : "none"}
+                  stroke={pos.can_reach ? "#22c55e" : "#ef4444"}
+                  strokeWidth="0.08"
+                  strokeDasharray="0.15,0.1"
+                  opacity="0.6"
+                />
               ))}
               {/* Units - use memoized UnitMarker component */}
               {unitList.map((unit) => (
@@ -924,7 +1007,7 @@ function GameContent() {
                 </div>
               </div>
               {gameMode === 'arcade' ? (
-                // Arcade mode: 6 command buttons
+                // Arcade mode: 6 command buttons with batch support
                 <div className="space-y-2">
                   <div className="text-xs text-purple-300 font-medium mb-1">コマンドを選択:</div>
                   <div className="grid grid-cols-3 gap-1.5">
@@ -936,13 +1019,49 @@ function GameContent() {
                       { cmd: 'supply', label: '補給', icon: '+', color: 'bg-yellow-600' },
                       { cmd: 'strike', label: '特攻', icon: '*', color: 'bg-purple-600' },
                     ].map((btn) => (
-                      <button key={btn.cmd} onClick={() => submitArcadeCommand(btn.cmd)} disabled={loading}
+                      <button key={btn.cmd} onClick={() => addToBatch(btn.cmd)} disabled={loading || !selectedUnit}
                         className={`${btn.color} hover:opacity-90 disabled:opacity-50 rounded-lg p-2 text-xs font-bold transition-all flex flex-col items-center gap-0.5`}>
                         <span className="text-sm">{btn.icon}</span>
                         <span>{btn.label}</span>
                       </button>
                     ))}
                   </div>
+                  {/* Issue #56: Pending orders panel */}
+                  {pendingOrders.length > 0 && (
+                    <div className="mt-2 bg-purple-900/30 rounded-lg p-2 text-xs space-y-1">
+                      <div className="text-purple-300 font-medium flex justify-between items-center">
+                        <span>保留中の命令: {pendingOrders.length}</span>
+                        <button onClick={() => setPendingOrders([])} className="text-gray-400 hover:text-white text-[10px]">クリア</button>
+                      </div>
+                      {pendingOrders.map((order, i) => {
+                        const unit = gameState?.units?.find(u => u.id === order.unit_id);
+                        return (
+                          <div key={i} className="flex justify-between text-gray-300 text-[10px] bg-gray-800/50 rounded px-2 py-1">
+                            <span>{unit?.name || `Unit ${order.unit_id}`}</span>
+                            <span className="text-purple-400">{order.order_type}</span>
+                          </div>
+                        );
+                      })}
+                      <button onClick={submitBatchOrders} disabled={loading}
+                        className="w-full mt-2 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 rounded-lg p-2 text-xs font-bold transition-colors">
+                        一括送信 ({pendingOrders.length})
+                      </button>
+                    </div>
+                  )}
+                  {/* STRIKE tokens display for selected unit */}
+                  {selectedUnit && gameMode === 'arcade' && 'strike_remaining' in selectedUnit && (
+                    <div className="mt-2 flex items-center gap-2 text-xs">
+                      <span className="text-purple-300">特攻:</span>
+                      <div className="flex gap-1">
+                        {Array.from({ length: 3 }).map((_, i) => (
+                          <span key={i} className={`w-3 h-3 rounded-full ${i < (selectedUnit.strike_remaining || 0) ? 'bg-purple-500' : 'bg-gray-600'}`} />
+                        ))}
+                      </div>
+                      {(selectedUnit as any).strike_next_attack_blocked && (
+                        <span className="text-red-400 text-[10px]">(次ターン攻撃不可)</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : (
                 // Classic mode: text input

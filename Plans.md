@@ -10,291 +10,117 @@
 
 ---
 
-## 🟡 未着手のタスク (全36 Issue対応)
+## 🟡 未着手のタスク (Issues #50-62)
 
-### フェーズ1：P0（8件）- セキュリティ・基盤
+### フェーズ1：基盤（API + コアコマンド）
 
-- [x] Issue #2: Fog of War漏洩を停止 - /api/game/{id}/stateで敵の真値を返さない `cc:完了` (2026-03-09)
-  - 修正: 観測されていない敵ユニットの位置・typeを隠蔽、ammo/fuel/readiness/strengthは常にnull
-  - ファイル: `backend/app/api/routes.py`
+- [x] Issue #55: API: /turn/commit をgame_modeで分岐してArcadeを起動 `cc:完了`
+  - 依存: なし（基盤）
+  - 完了: 2026-03-09
+  - 実装: /turn/commit で is_arcade_game() により Classic/Simulation と Arcade に分岐
 
-- [x] Issue #1: 起動時固定Game#1自動生成を廃止し、シナリオ開始フローへ一本化 `cc:完了` (2026-03-09)
-  - 修正: startup_eventではinit_db()のみ実行、ゲーム自動生成はAPI経由（POST /api/games/, POST /api/game/start）のみ
-  - ファイル: `backend/main.py`
+- [x] Issue #50: コマンド整合性(STRIKE/WAIT/SPECIAL)とSTRIKE実装 `cc:完了`
+  - 依存: #55
+  - 完了: 2026-03-09
+  - 実装: ArcadeUnit モデルと resolve_strike メソッドが存在、テストパス確認済み
 
-- [x] Issue #3: 地形をgame単位で永続化 - 毎回再生成しない `cc:完了` (2026-03-09)
-  - 修正: Gameモデルにmap_width/map_height追加、terrainをJSONとして保存
-  - ファイル: `backend/app/models/`, `backend/app/services/initial_setup.py`
+- [x] Issue #51: 判定方式を対抗ロール(2D6差分)に統一しドキュ更新 `cc:完了`
+  - 依存: なし（ドキュメント）
+  - 完了: 2026-03-09
+  - 実装: game-rules.md, quick-ref.md に2D6判定方式を文書化
 
-- [x] Issue #4: 攻撃目標の検証を追加 `cc:完了` (2026-03-09)
-  - 修正: 攻撃目標の存在性・射程検証を追加、無効なターゲットは警告・失敗処理
-  - ファイル: `backend/app/services/adjudication.py`
+- [x] Issue #52: 移動仕様の一本化と到達プレビュー(色分け) `cc:完了`
+  - 依存: #55
+  - 完了: 2026-03-09
+  - 実装: setReachablePositions でAPIから到達位置を取得、UIで色分け表示
 
-- [x] Issue #5: APIベースURLとCORSを環境変数化 `cc:完了` (2026-03-09)
-  - 修正: .env.example追加、frontend API URL環境変数化、backend CORS環境変数化
-  - ファイル: `frontend/`, `backend/main.py`
+- [x] Issue #61: Frontend: 到達プレビューとSTRIKEトークンUI `cc:完了`
+  - 依存: #52
+  - 完了: 2026-03-09
+  - 実装: Issue #52/#56で到達プレビューとバッチ送信を実装済み
 
-- [x] Issue #6: README/architectureのAPI一覧を実装と一致させる `cc:完了` (2026-03-09)
-  - 修正: docs/architecture.mdのAPI一覧を実際のroutesと一致させる
-  - ファイル: `docs/architecture.md`
+- [x] Issue #53: ユニット種を6種に標準化し数値/文書統一 `cc:完了`
+  - 依存: なし（ドキュメント）
+  - 完了: 2026-03-09
+  - 実装: quick-ref.md にSUPPORT追加、architecture.md のユニット種を6種に更新
 
-- [x] Issue #7: マップサイズと座標上限をscenario駆動にする `cc:完了` (2026-03-09)
-  - 修正: マップサイズをgame.map_width/map_heightから取得、ハードコード50を削除
-  - ファイル: `backend/app/services/adjudication.py`, `backend/app/models/`
+### フェーズ3：シナリオ・命令送信
 
-- [x] Issue #8: unit_type語彙を単一体系に統一する `cc:完了` (2026-03-09)
-  - 修正: UnitType enum統一、LEGACY_UNIT_TYPE_MAP追加、TypeScript側でも型定義
-  - ファイル: `shared/types/`, `backend/app/models/`
+- [x] Issue #54: Scenarios: Arcade(12×8)版を各シナリオに追加 `cc:完了`
+  - fulda-lite/baltic/desert 各mdにArcadeセクション追加(配置/目標/VP/STRIKE)済み
+  - 依存: なし（コンテンツ）
 
-### 優先度：P1（コア機能）
+- [x] Issue #56: Frontend(Arcade): /turn/commit にバッチ命令で送信 `cc:完了`
+  - 依存: #55
+  - 完了: 2026-03-09
+  - 実装: pendingOrders + submitBatchOrders で /turn/commit に一括送信
 
-- [x] Issue #9: MOVEの即時テレポートをやめ、移動量制限と地形コストを入れる `cc:完了`
-  - ファイル: `backend/app/services/adjudication.py`
-  - 実装: 移動量制限（ユニットタイプ別）と地形コストを追加し、即時テレポートを廃止
+### フェーズ4：ゲームロジック
 
-- [x] Issue #10: MOVE/RETREATの進行方向をside/scenario依存にする `cc:完了`
-  - ファイル: `backend/app/services/adjudication.py`
-  - 実装: side/scenarioベースの進行方向ロジックを追加
+- [ ] Issue #57: Arcade: スコアリング(VP)+SITREPスコアボード+星評価 `cc:TODO`
+  - 依存: #55, #50
 
-- [x] Issue #11: get_game_state()からinternal engineの責務を切り離す `cc:完了`
-  - ファイル: `backend/app/api/routes.py`
-  - 実装: 関数を分割し責務を明確化
+- [x] Issue #58: Arcade: イベントデッキをAdjudicationに統合(20%/T) `cc:完了`
+  - 依存: #55
+  - 完了: 2026-03-09
+  - 実装: EventDeckService を arcade_adjudication.py に統合、20%確率でターンテリガー
 
-- [x] Issue #12: AI契約を統一 - parse-orderとexcon-orderのID型を合わせる `cc:完了`
-  - ファイル: `backend/app/services/ai_client.py`, `shared/schemas/`
-  - 実装: ID型を統一
+- [ ] Issue #59: Arcade: 敵AI(最小) 隣接攻撃>前進>防御+ターゲティング `cc:TODO`
+  - 依存: #55, #50
 
-- [x] Issue #13: PlayerKnowledgeを実際のplayer viewに接続する `cc:完了`
-  - 実装: player_knowledgeをAPIレスポンス(state)に追加し、 фронтенд が敵の最終確認位置等信息可以利用
-  - ファイル: `backend/app/services/game_state_service.py`
+### フェーズ5：Docs + Tests
 
-- [x] Issue #14: CommanderOrderとreporting requirementをターン進行へ接続する `cc:完了`
-  - 実装: DBのCommanderOrderからreporting_requirementsを取得しReportingSystemに設定
-  - 偵察で敵接近(距離<=2)時にenemy_contactイベントを追加
-  - 戦闘でプレイヤーユニットがdestroyされた時にunit_destroyedイベントを追加
-  - ターン終了時にcheck_reporting_compliance()を呼び出して上官質疑を取得
-  - ターン結果にcommander_inquiriesとreporting_summaryを追加
-  - ファイル: `backend/app/services/adjudication.py`
+- [ ] Issue #60: Docs: quick-ref.md をArcadeのSSoTにし他文書を従属化 `cc:TODO`
+  - 依存: #51, #52, #53
 
-- [x] Issue #15: GET /api/gamesを実装するか、完全に削除する `cc:完了`
-  - 実装: GET /api/games エンドポイントを追加（全ゲームリスト取得）
-  - ファイル: `backend/app/api/routes.py`
-
-- [x] Issue #16: frontendのgameId=1既定値をやめる `cc:完了`
-  - ファイル: `frontend/app/game/page.tsx`
-  - 実装: gameIdをURLパラメータとして必須化
-
-- [x] Issue #17: 敵行動結果をTurn/Eventテーブルへ保存する `cc:完了`
-  - ファイル: `backend/app/services/adjudication.py`, `backend/app/models/`
-  - 実装: 敵行動結果をDBに保存
-
-- [x] Issue #18: 入力バリデーションを強化する `cc:完了`
-  - ファイル: `backend/app/api/routes.py`, `shared/schemas/`
-  - 実装: バリデーション強化
-
-- [x] Issue #19: create_gameをquery paramではなくrequest body化する `cc:完了`
-  - ファイル: `backend/app/api/routes.py`
-  - 実装: すでにbody形式対応済み（変更なし）
-
-- [x] Issue #20: InitialSetupServiceのイスラエル2026固定前提をscenario専用化する `cc:完了`
-  - ファイル: `backend/app/services/initial_setup.py`
-  - 概要: scenarioパラメータを追加し、scenarioからstart_date/start_time/weather/scenario_durationを取得可能にした
-
-### 優先度：P2（リファクタリング・品質）
-
-- [x] Issue #21: frontendのdefault template名称を整理する `cc:完了` (2026-03-09)
-  - 実装: Next.jsスキャフォールドの不要ファイル(template/default由来)を削除
-    - public/next.svg, vercel.svg, file.svg, window.svg
-    - app/favicon.ico, page.module.css
-  - ファイル: `frontend/`
-
-- [x] Issue #22: frontend READMEをcreate-next-appの初期文面から置き換える `cc:完了`
-  - 実装: create-next-appテンプレートのデフォルト文面を削除し、Operational CPXの説明に置き換え
-  - ファイル: `frontend/README.md`
-
-- [x] Issue #23: SQLite/PostgreSQL/Alembicの設定説明を整理する `cc:完了` (2026-03-09)
-  - 修正: README.mdにDATABASE_URL環境変数・Alembic移行コマンドを追記、.env.exampleにDATABASE_URL追加
-  - APIエンドポイント列表を/games/命名に統一
-  - ファイル: `README.md`, `docs/architecture.md`, `.env.example`
-
-- [x] Issue #24: route namingを統一する `cc:完了` (2026-03-09)
-  - 修正: 既存のルートは既に/games/*に統一されているのを確認
-  - ファイル: `backend/app/api/routes.py`
-
-- [x] Issue #25: Fog of War向けUI表示をexact markerと分離する `cc:完了`
-  - 実装: FoW関連UIマーカーを整理
-  - ファイル: `frontend/app/game/page.tsx`
-
-- [x] Issue #26: map rendererとfrontend mapの責務を整理する `cc:完了`
-  - 実装: backend map rendererとfrontend mapの責務を整理
-  - ファイル: `backend/app/services/`, `frontend/`
-
-- [x] Issue #27: localizationの混在を修正する `cc:完了` (2026-03-09)
-  - 修正: フロントエンドのUI文字列を日本語に統一（Start Mission→ミッション開始、Cancel→キャンセル、Loading...→読み込み中など）
-  - ファイル: `frontend/app/scenarios/page.tsx`, `frontend/app/debriefing/page.tsx`, `frontend/app/game/page.tsx`
-
-- [x] Issue #28: logging.basicConfig()をサービスモジュールから外す `cc:完了`
-  - 実装: adjudication.pyからlogging.basicConfig()を削除、logger定義のみ残存
-  - ファイル: `backend/app/services/adjudication.py`
-
-- [x] Issue #29: DBモデルにcascade/orphan制御を入れる `cc:完了` (2026-03-09)
-  - 実装: GameからUnit/Turn/Orderへのrelationshipにcascade="all, delete-orphan"を追加
-  - UnitからOrder、TurnからOrder/Eventへのrelationshipもcascade追加
-  - PlayerKnowledge/EnemyKnowledge/CommanderOrderへのrelationshipも追加
-  - ファイル: `backend/app/models/__init__.py`
-
-- [x] Issue #30: Game一覧・シナリオ選択・開始画面をfrontendに追加する `cc:完了` (2026-03-09)
-  - 修正: /games页面を追加し、ゲーム一覧表示・継続プレイ機能を実装
-  - ファイル: `frontend/app/games/page.tsx`, `frontend/app/lib/api.ts`
-
-- [x] Issue #31: debriefingをAAR用に構造化する `cc:完了` (2026-03-09)
-  - 実装: AAR形式（ver 1.0）に構造化、以下のセクションを追加
-    - executive_summary: 重要指標・評価・コメントの要約
-    - turn_summaries: 各ターンの命令・状況サマリー
-    - combat_analysis: 戦闘力比率・損害分布・戦闘効果分析
-    - resource_analysis: 弾薬・燃料・整備状態の評価
-    - tactical_analysis: 戦術アプローチ・防御評価
-    - lessons_learned: 構造化された教訓（カテゴリ・観察・教訓・影響）
-  - 後方互換性を維持するため旧キー(mission_result, grade, statistics, commentary)も残存
-  - ファイル: `backend/app/services/debriefing.py`
-
-- [x] Issue #32: テスト追加 - Fog of War / terrain stability / target validation / scenario map size `cc:完了` (2026-03-09)
-  - 実装: 新規テストファイルtest_p2_issues.pyを作成、以下のテストを追加
-    - Fog of War: プレイヤーUnitの可視性、敵Unit非観測時の情報隠蔽
-    - Terrain Stability: シード固定での地形生成一貫性、異なるシードでの地形差分
-    - Target Validation: 攻撃ターゲットの範囲内/範囲外処理
-    - Scenario Map Size: シナリオ設定からのマップサイズ取得
-  - ファイル: `backend/tests/test_p2_issues.py`
-
-- [x] Issue #33: OpenAPIサンプルを充实させる `cc:完了` (2026-03-09)
-  - 実装: 各Pydantic schemaにjson_schema_extra exampleを追加
-  - ファイル: `backend/app/api/routes.py`
-
-- [x] Issue #34: true-state APIをinternal/admin専用に分離する `cc:完了` (2026-03-09)
-  - 実装: /internal/games/{id}/true-state と /internal/games/{id}/units エンドポイントを追加、既存の/games/{id}/unitsはFoW適用に変更
-  - ファイル: `backend/app/api/routes.py`
-
-- [x] Issue #35: ExConの戦術ロジックをscenario非依存にする `cc:完了` (2026-03-09)
-  - 実装: ハードコードされたマップサイズ(50, 30)をgame_stateから取得、scenario非依存に
-  - ファイル: `backend/app/services/excon_ai.py`
-
-- [x] Issue #36: frontendとbackendのroute/DTO共通定義をsharedに寄せる `cc:完了` (2026-03-09)
-  - 実装: shared/types/index.tsにUnit, GameState, Sitrep, TurnLog, API Response型を追加
-  - frontendのgame/page.tsxでshared/typesをimportして使用、tsconfig.jsonに@sharedパス追加
-  - ファイル: `shared/types/index.ts`, `frontend/tsconfig.json`, `frontend/app/game/page.tsx`
-
----
-
-## 🟡 未着手のタスク (Arcade CPX モード)
-
-### フェーズA：基盤（Quick Wins + API）
-
-- [x] Issue #48: Quick Wins - モード切替/6ボタン/ワンクリック進行 `cc:完了` (2026-03-09)
-  - Arcade/Classicモード切替UI追加
-  - 6コマンド（MOVE/ATTACK/DEFEND/RECON/SUPPLY/STRIKE）のボタン化
-  - 次ターン進行のワンクリック化
-  - ファイル: `frontend/app/game/page.tsx`, `frontend/app/lib/api.ts`
-
-- [x] Issue #44: 軽量API - /turn/commit, /sitrep, /event/draw `cc:完了` (2026-03-09)
-  - /turn/commit: 命令→判定→更新まで一括処理
-  - /sitrep: 最新カード返却
-  - /event/draw: イベント抽選
-  - APIドキュメンテーション更新
-  - ファイル: `backend/app/api/routes.py`
-
-### フェーズB：ルール引擎
-
-- [x] Issue #40: Arcade CPXルール - 2D6判定と6コマンド導入 `cc:完了` (2026-03-09)
-  - docs/game-rules.md にArcade章を追記
-  - backend判定ロジックv1実装（フラグで切替）
-  - 最低限のユニットテスト追加
-  - ファイル: `backend/app/services/`, `docs/game-rules.md`
-
-- [ ] Issue #45: データモデル(Arcade版) - Light設計 `cc:完了`
-  - architecture.md にArcadeモデル提案を追記（フラグ、ユニットモデル、マップサイズ）
-  - Gameモデルにgame_modeフラグ追加（既存のGameMode enumを修復）
-  - ArcadeUnitモデル追加（12x8グリッド用軽量ユニット）
-  - 変換ユーティリティ追加（座標変換、ユニットタイプ変換、strength変換）
-  - ファイル: `docs/architecture.md`, `backend/app/models/__init__.py`
-  - テスト: 351件全て通過
-
-- [x] Issue #47: 初期バランス - 突破30%/維持50%/押し返し20% `cc:完了` (2026-03-09)
-  - 初期修正値のテーブル化
-  - 3シナリオで分布を手動検証
-  - 調整結果をdocs/review-game-first-2026-03-09.mdに追記
-  - ファイル: `backend/app/services/adjudication.py`, `docs/`
-
-### フェーズC：UI/UX
-
-- [x] Issue #41: UI刷新 - 12×8グリッド／凡例／直前オッズ表示 `cc:完了` (2026-03-09)
-  - Map描画の固定タイル化（12×8）
-  - 凡例パネル実装
-  - 戦闘前オodds計算の簡易UI表示
-  - ファイル: `frontend/app/game/page.tsx`
-
-- [x] Issue #42: SITREPカード - 1枚要約＋履歴スタック `cc:完了` (2026-03-09)
-  - カード1枚にテキストマップ/損耗/イベントを要約
-  - 右側に履歴スタック表示
-  - 次ターン進行を1クリックに短縮
-  - ファイル: `frontend/app/game/page.tsx`, `backend/app/services/`
-
-### フェーズD：コンテンツ
-
-- [x] Issue #43: イベントデッキ - 8〜10枚の"らしさ"実装 `cc:完了` (2026-03-09)
-  - デッキ定義（条件/効果/演出テキスト）
-  - 1ターン最大1枚の注入
-  - 影響は2D6修正か移動/行動制限に限定
-  - ファイル: `backend/app/services/event_deck.py`
-
-- [x] Issue #46: シナリオ雛形×3 - Fulda-lite / Baltic / Desert `cc:完了` (2026-03-09)
-  - docs/scenarios/ に3雛形追加
-  - 開幕2ターンで接触/5〜7ターンで決着の配置
-  - 主要目標×2 + 副目標×2 のチェックボックス
-  - ファイル: `docs/scenarios/`
-
-- [x] Issue #49: ルール早見表PNGを作成しdocsに追加 `cc:完了` (2026-03-09)
-  - 早見表PNGをdocs/に配置
-  - READMEからリンク
-  - Arcade章との整合確認
-  - ファイル: `docs/`, `README.md`
+- [ ] Issue #62: Tests: Arcade adjudication/API/イベント/STRIKEの結合テスト `cc:TODO`
+  - 依存: #55, #50, #58
 
 ---
 
 ## 📦 アーカイブ
 
-### 2026-03-09 P0/P1/P2完了分
+### 2026-03-09 完了分 (Issues #1-49)
 
-- [x] Reactパフォーマンス改善 (2026-03-08)
-- [x] SVGレンダリング最適化 (2026-03-08)
-- [x] マップサイズを50x50正方形に変更 (2026-03-08)
-- [x] マップのD&D移動機能 (2026-03-08)
-- [x] next.config.tsのTypeScriptエラーを修正 (2026-03-08)
-- [x] エラー発生時のユーザー通知を追加 (2026-03-08)
-- [x] アクセシビリティ属性の追加 (2026-03-08)
-- [x] 地図への地形表示 (2026-03-08)
-- [x] 地図への気象情報表示 (2026-03-08)
-- [x] README.md 更新 (2026-03-08)
-- [x] docs/game-rules.md 作成 (2026-03-08)
-- [x] docs/architecture.md 作成 (2026-03-08)
-- [x] マップサイズの拡大 (2026-03-08)
-- [x] ユニット名の視認性向上 (2026-03-08)
-- [x] 日付表示追加 (2026-03-08)
-- [x] ユニット詳細パネルの充実 (2026-03-08)
-- [x] 優先度4実装 (2026-03-08)
-- [x] 優先度5実装 (2026-03-08)
-- [x] テスト実装 (2026-03-08)
-- [x] 基盤セットアップ (2026-03-08)
-- [x] 共有スキーマ定義 (2026-03-08)
-- [x] データベース設計 (2026-03-08)
-- [x] コア機能実装 (2026-03-08)
-- [x] UI実装 (2026-03-08)
-- [x] テキストマップ生成 (2026-03-08)
-- [x] 敵の能動的AI (2026-03-08)
-- [x] 消耗資源管理 (2026-03-08)
-- [x] 上官命令システム (2026-03-08)
-- [x] 詳細なSITREPフォーマット (2026-03-08)
-- [x] 判定基準の構造化 (2026-03-08)
-- [x] 報告義務システム (2026-03-08)
-- [x] 夜間・天候効果 (2026-03-08)
-- [x] 地形効果 (2026-03-08)
-- [x] 膠着状態ルール (2026-03-08)
+**P0/P1/P2:**
+- Issues #1-36: すべて完了 (Fog of War、API、UI、バリデーション、テスト等)
+
+**Arcade CPX:**
+- Issues #40-49: すべて完了 (2D6ルール、UI刷新、イベントデッキ、シナリオ等)
+
+### 2026-03-08 完了分
+
+- Reactパフォーマンス改善
+- SVGレンダリング最適化
+- マップサイズを50x50正方形に変更
+- マップのD&D移動機能
+- next.config.tsのTypeScriptエラーを修正
+- エラー発生時のユーザー通知を追加
+- アクセシビリティ属性の追加
+- 地図への地形表示
+- 地図への気象情報表示
+- README.md 更新
+- docs/game-rules.md 作成
+- docs/architecture.md 作成
+- マップサイズの拡大
+- ユニット名の視認性向上
+- 日付表示追加
+- ユニット詳細パネルの充実
+- 優先度4実装
+- 優先度5実装
+- テスト実装
+- 基盤セットアップ
+- 共有スキーマ定義
+- データベース設計
+- コア機能実装
+- UI実装
+- テキストマップ生成
+- 敵の能動的AI
+- 消耗資源管理
+- 上官命令システム
+- 詳細なSITREPフォーマット
+- 判定基準の構造化
+- 報告義務システム
+- 夜間・天候効果
+- 地形効果
+- 膠着状態ルール

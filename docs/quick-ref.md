@@ -1,15 +1,21 @@
 # Arcade CPX Quick Reference
 
-## 2D6 Judgment Table
+## 2D6 Judgment Table (Diff System)
 
-| Roll+Mod | Result | Effect |
-|----------|--------|--------|
-| 2-3 | CRITICAL FAIL | Attacker takes 1 damage |
-| 4-5 | FAIL | No damage |
-| 6-7 | PARTIAL | Defender: 1 damage |
-| 8-9 | SUCCESS | Defender: 2 damage |
-| 10-11 | GREAT | Defender: 3 damage |
-| 12+ | CRITICAL | Defender: 4 damage |
+Roll 2D6 for attacker and defender, then calculate the difference.
+
+**Diff = (Attacker 2D6) - (Defender 2D6)**
+
+| Diff | Result | Abbr | Description |
+|------|--------|------|-------------|
+| 0-1 | DRAW | D | No decisive outcome |
+| 2-3 | ADVANTAGE | A | Minor advantage |
+| 4-5 | VICTORY | V | Decisive win |
+| 6+ | COMPLETE_VICTORY | CV | Full effect |
+| -1 to -3 | DEFENDER_ADV | DA | Defender advantage |
+| -6 or less | DEFENDER_VICTORY | DV | Defender repels |
+
+Same table applies to both sides (whoever has positive diff uses it).
 
 ## 6 Commands
 
@@ -22,7 +28,7 @@
 | SUPPLY | + | Request logistics |
 | STRIKE | * | Heavy attack |
 
-## Unit Stats
+## Unit Stats (6 Types)
 
 | Type | ATK | DEF | MOVE | HP |
 |------|-----|-----|------|-----|
@@ -31,6 +37,7 @@
 | ARTILLERY | 5 | 2 | 2 | 2 |
 | AIR_DEFENSE | 2 | 4 | 2 | 3 |
 | RECON | 2 | 2 | 4 | 2 |
+| SUPPORT | 1 | 3 | 3 | 4 |
 
 ## Terrain Movement
 

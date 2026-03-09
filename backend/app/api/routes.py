@@ -5,8 +5,9 @@ from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import Literal
 from typing import Optional, List
 from app.database import get_db
-from app.models import Game, Unit, Turn, Order, OrderType, PlayerKnowledge, Event
+from app.models import Game, Unit, Turn, Order, OrderType, PlayerKnowledge, Event, GameMode, is_arcade_game
 from app.services.adjudication import RuleEngine
+from app.services.arcade_adjudication import ArcadeAdjudication
 from app.services.ai_client import AIClient
 from app.services.game_state_service import get_game_state_with_fow
 from app.services.scenario_manager import ScenarioManager
@@ -144,7 +145,7 @@ class OrderCreate(BaseModel):
     })
 
     unit_id: int = Field(..., gt=0)
-    order_type: Literal["move", "attack", "defend", "support", "retreat", "recon", "supply", "special"]
+    order_type: Literal["move", "attack", "defend", "support", "retreat", "recon", "supply", "special", "wait"]
     target_units: Optional[List[int]] = None
     intent: str = Field(..., min_length=1, max_length=1000)
     location_x: Optional[float] = Field(None, ge=0, le=100)
@@ -324,7 +325,13 @@ def get_game_state(game_id: int, db: Session = Depends(get_db)):
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
 
-    # Get internal engine state (contains full truth)
+    # Branch based on game_mode
+    if is_arcade_game(game.game_mode):
+        # Arcade mode: Use ArcadeAdjudication
+        arcade_engine = ArcadeAdjudication(db)
+        return arcade_engine.get_game_state(game_id)
+
+    # Classic/Simulation mode: Use RuleEngine with Fog of War
     engine = RuleEngine(db)
     engine_state = engine.get_game_state(game_id)
 
@@ -414,6 +421,38 @@ def move_unit(unit_id: int, request: MoveUnitRequest, db: Session = Depends(get_
     db.refresh(unit)
 
     return {"success": True, "unit_id": unit_id, "x": unit.x, "y": unit.y}
+
+
+@router.get("/units/{unit_id}/reachable")
+def get_unit_reachable(unit_id: int, db: Session = Depends(get_db)):
+    """Get reachable positions for a unit (for movement preview in Arcade mode).
+
+    Returns all grid positions with info on whether the unit can reach them
+    based on movement points and terrain costs.
+    """
+    # Check if unit is ArcadeUnit
+    from app.models import ArcadeUnit
+    arcade_unit = db.query(ArcadeUnit).filter(ArcadeUnit.id == unit_id).first()
+
+    if arcade_unit:
+        # Use ArcadeAdjudication for Arcade mode
+        engine = ArcadeAdjudication(db)
+        return engine.get_reachable_positions(unit_id)
+
+    # Fallback to regular Unit (Classic mode)
+    unit = db.query(Unit).filter(Unit.id == unit_id).first()
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unit not found")
+
+    # Get game for terrain data
+    game = db.query(Game).filter(Game.id == unit.game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    # For Classic mode, use RuleEngine
+    from app.services.adjudication import RuleEngine
+    engine = RuleEngine(db)
+    return engine.get_reachable_positions_classic(unit_id)
 
 
 # Scenario endpoints
@@ -512,6 +551,10 @@ async def turn_commit(request: TurnCommitRequest, db: Session = Depends(get_db))
     """
     Lightweight endpoint: Process orders -> adjudication -> update in one go.
     This combines order creation and turn advancement for simple frontend use.
+
+    Branches based on game_mode:
+    - Classic (Simulation): Uses RuleEngine with full unit model
+    - Arcade: Uses ArcadeAdjudication with simplified 2D6 rules
     """
     game = db.query(Game).filter(Game.id == request.game_id).first()
     if not game:
@@ -534,6 +577,19 @@ async def turn_commit(request: TurnCommitRequest, db: Session = Depends(get_db))
         db.add(turn)
         db.commit()
         db.refresh(turn)
+
+    # Branch based on game_mode
+    if is_arcade_game(game.game_mode):
+        # Arcade mode: Use ArcadeAdjudication
+        return await _arcade_turn_commit(request, db, game, turn)
+    else:
+        # Classic/Simulation mode: Use RuleEngine
+        return await _classic_turn_commit(request, db, game, turn)
+
+
+async def _classic_turn_commit(request, db, game, turn):
+    """Handle Classic/Simulation mode turn commit"""
+    from app.models import Unit
 
     # Create orders from request
     order_results = []
@@ -571,7 +627,7 @@ async def turn_commit(request: TurnCommitRequest, db: Session = Depends(get_db))
             "status": "submitted"
         })
 
-    # Run adjudication
+    # Run adjudication with RuleEngine
     engine = RuleEngine(db)
     ai = AIClient()
     result = engine.adjudicate_turn(request.game_id)
@@ -628,6 +684,166 @@ async def turn_commit(request: TurnCommitRequest, db: Session = Depends(get_db))
         "next_time": result.get("next_time"),
         "next_turn": game.current_turn
     }
+
+
+async def _arcade_turn_commit(request, db, game, turn):
+    """Handle Arcade mode turn commit"""
+    from app.models import ArcadeUnit
+
+    # Create orders from request (for ArcadeUnit)
+    order_results = []
+    for order_req in request.orders:
+        # Validate arcade unit exists
+        unit = db.query(ArcadeUnit).filter(ArcadeUnit.id == order_req.unit_id).first()
+        if not unit:
+            order_results.append({
+                "unit_id": order_req.unit_id,
+                "status": "error",
+                "error": "ArcadeUnit not found"
+            })
+            continue
+
+        # Store order in DB for history
+        db_order = Order(
+            game_id=game.id,
+            unit_id=order_req.unit_id,
+            turn_id=turn.id,
+            order_type=OrderType[order_req.order_type.upper()],
+            target_units=order_req.target_units,
+            intent=order_req.intent,
+            location_x=order_req.location_x,
+            location_y=order_req.location_y,
+            location_name=order_req.location_name,
+            parameters={"priority": order_req.priority} if order_req.priority else None
+        )
+        db.add(db_order)
+        db.commit()
+        db.refresh(db_order)
+
+        order_results.append({
+            "id": db_order.id,
+            "unit_id": order_req.unit_id,
+            "order_type": order_req.order_type,
+            "status": "submitted"
+        })
+
+    # Run adjudication with ArcadeAdjudication
+    arcade_engine = ArcadeAdjudication(db)
+
+    # Convert orders to Arcade format
+    arcade_orders = []
+    for order_req in request.orders:
+        order_dict = {
+            "unit_id": order_req.unit_id,
+            "order_type": order_req.order_type,
+        }
+        if order_req.location_x is not None:
+            order_dict["location_x"] = int(order_req.location_x)
+        if order_req.location_y is not None:
+            order_dict["location_y"] = int(order_req.location_y)
+        if order_req.target_units and len(order_req.target_units) > 0:
+            order_dict["target_id"] = order_req.target_units[0]
+        arcade_orders.append(order_dict)
+
+    result = arcade_engine.adjudicate_turn(request.game_id, arcade_orders)
+
+    # Get updated game state
+    game_state = arcade_engine.get_game_state(request.game_id)
+
+    # For Arcade mode, generate a simple SITREP
+    sitrep = _generate_arcade_sitrep(result, game_state)
+
+    # Save to turn
+    turn = db.query(Turn).filter(
+        Turn.game_id == request.game_id,
+        Turn.turn_number == game.current_turn
+    ).first()
+
+    if turn:
+        turn.sitrep = sitrep
+        turn.excon_orders = None
+        turn.enemy_results = result.get("enemy_actions", [])
+        db.commit()
+
+    # Advance turn
+    game.current_turn += 1
+    db.commit()
+
+    return {
+        "turn": result.get("turn", game.current_turn - 1),
+        "orders_submitted": order_results,
+        "results": result,
+        "events": result.get("events", []),
+        "enemy_results": result.get("enemy_actions", []),
+        "sitrep": sitrep,
+        "next_time": None,
+        "next_turn": game.current_turn,
+        "victory": result.get("victory")
+    }
+
+
+def _generate_arcade_sitrep(arcade_result: dict, game_state: dict) -> str:
+    """Generate a simple SITREP for Arcade mode"""
+    lines = []
+    lines.append(f"=== Turn {arcade_result.get('turn', '?')} SITREP ===")
+
+    # Victory/Defeat
+    if arcade_result.get("victory") == "PLAYER_WINS":
+        lines.append("VICTORY! All enemy units have been destroyed.")
+    elif arcade_result.get("victory") == "ENEMY_WINS":
+        lines.append("DEFEAT! All your units have been destroyed.")
+
+    # Moves
+    if arcade_result.get("moves"):
+        lines.append("\nMovements:")
+        for move in arcade_result["moves"]:
+            lines.append(f"  - {move.get('unit', 'Unknown')}: {move.get('result', '?')}")
+
+    # Attacks
+    if arcade_result.get("attacks"):
+        lines.append("\nCombat:")
+        for attack in arcade_result["attacks"]:
+            lines.append(
+                f"  - {attack.get('attacker', '?')} vs {attack.get('defender', '?')}: "
+                f"{attack.get('result', '?')} (dmg: {attack.get('damage_to_defender', 0)})"
+            )
+
+    # STRIKE results
+    if arcade_result.get("strikes"):
+        lines.append("\nSTRIKE Actions:")
+        for strike in arcade_result["strikes"]:
+            result = strike.get("result", "?")
+            if result == "SUCCESS":
+                lines.append(
+                    f"  - {strike.get('unit', '?')}: STRIKE activated! "
+                    f"+{strike.get('attack_modifier', 2)} attack modifier. "
+                    f"Tokens remaining: {strike.get('strikes_remaining', '?')}"
+                )
+            else:
+                lines.append(
+                    f"  - {strike.get('unit', '?')}: STRIKE failed - {strike.get('reason', 'unknown')}"
+                )
+
+    # WAIT results (informational only)
+    if arcade_result.get("waits"):
+        lines.append("\nWait:")
+        for wait in arcade_result["waits"]:
+            lines.append(f"  - {wait.get('unit', '?')}: Waiting")
+
+    # Destructions
+    if arcade_result.get("destructions"):
+        lines.append("\nDestroyed:")
+        for name in arcade_result["destructions"]:
+            lines.append(f"  - {name}")
+
+    # Unit status
+    units = game_state.get("units", [])
+    player_units = [u for u in units if u.get("side") == "player"]
+    enemy_units = [u for u in units if u.get("side") == "enemy"]
+
+    lines.append(f"\nRemaining forces: Player {len(player_units)} | Enemy {len(enemy_units)}")
+
+    return "\n".join(lines)
 
 
 @router.get("/sitrep")

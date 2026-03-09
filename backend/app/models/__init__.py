@@ -263,6 +263,11 @@ class ArcadeUnit(Base):
     can_attack = Column(Boolean, default=True)
     has_supplied = Column(Boolean, default=False)  # Supply action used
 
+    # STRIKE command specific fields
+    strike_remaining = Column(Integer, default=3)  # Starting 3 strikes per game
+    strike_used_this_turn = Column(Boolean, default=False)  # Cannot use consecutively
+    strike_next_attack_blocked = Column(Boolean, default=False)  # Next turn attack blocked
+
     game = relationship("Game")
 
 

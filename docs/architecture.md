@@ -230,7 +230,7 @@ ArcadeUnit
 ├── id: Integer
 ├── game_id: ForeignKey
 ├── name: String
-├── unit_type: String  # infantry, armor, artillery (simplified)
+├── unit_type: String  # infantry, armor, artillery, air_defense, recon, support
 ├── side: String  # player, enemy
 ├── x: Integer  # Grid position (0-11)
 ├── y: Integer  # Grid position (0-7)

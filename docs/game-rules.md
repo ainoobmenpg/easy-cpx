@@ -159,20 +159,41 @@ Arcade mode provides a simplified, faster-paced experience using 2D6 dice rolls 
 | SIMULATION | Full rule engine with complex factors |
 | ARCADE | Simplified 2D6 system for quick battles |
 
-### 2D6 Judgment System
+### 2D6 Judgment System (Diff System)
 
-Combat and actions are resolved using 2 six-sided dice (2D6).
+Combat and actions are resolved by rolling 2D6 for both attacker and defender, then using the **difference** between the two rolls to determine the outcome.
 
-#### Base Roll Table
+#### Diff Calculation
 
-| Roll | Result | Description |
-|------|--------|-------------|
-| 2 | CRITICAL_FAIL | Complete failure, potential unit damage |
-| 3-4 | FAIL | Action failed |
-| 5-6 | PARTIAL | Mixed results |
-| 7-8 | SUCCESS | Action succeeded |
-| 9-10 | GREAT | Strong success |
-| 11-12 | CRITICAL | Exceptional result |
+```
+Diff = (Attacker 2D6 Roll) - (Defender 2D6 Roll)
+```
+
+#### Diff Table
+
+| Diff | Result | Abbr | Description |
+|------|--------|------|-------------|
+| 0-1 | DRAW | D | No decisive outcome |
+| 2-3 | ADVANTAGE | A | Attacker gains minor advantage |
+| 4-5 | VICTORY | V | Attacker wins decisively |
+| 6+ | COMPLETE_VICTORY | CV | Attacker wins with full effect |
+| -1 to -3 | DEFENDER_ADVANTAGE | DA | Defender has advantage |
+| -6 or less | DEFENDER_VICTORY | DV | Defender repels attack |
+
+The same table applies to both attacker and defender - whichever side has the positive difference uses the table for their result.
+
+#### Attack/Defense Ratings
+
+Base ratings by unit type:
+
+| Unit Type | Attack | Defense |
+|-----------|--------|---------|
+| INFANTRY | 3 | 3 |
+| ARMOR | 4 | 4 |
+| ARTILLERY | 5 | 2 |
+| AIR_DEFENSE | 2 | 4 |
+| RECON | 2 | 2 |
+| SUPPORT | 1 | 3 |
 
 #### Modifiers
 
@@ -187,18 +208,7 @@ Combat and actions are resolved using 2 six-sided dice (2D6).
 | Initiative (Attack First) | +1 |
 | Superior Numbers (2:1) | +1 |
 | Supply Depleted | -1 |
-| Supply Exhausted | -2 |
-
-#### Modified Roll Table
-
-| Modified Roll | Result |
-|---------------|--------|
-| 2-3 | CRITICAL_FAIL |
-| 4-5 | FAIL |
-| 6-7 | PARTIAL |
-| 8-9 | SUCCESS |
-| 10-11 | GREAT |
-| 12+ | CRITICAL |
+| Supply Exhausted | -2 | |
 
 ### Arcade Commands (6 Commands)
 
@@ -220,16 +230,16 @@ Combat and actions are resolved using 2 six-sided dice (2D6).
 5. Compare to 2D6 + defender's defense rating
 6. Higher total wins
 
-#### Damage Table
+#### Damage Table (Diff-Based)
 
-| Result | Damage to Defender |
-|--------|-------------------|
-| CRITICAL_FAIL | Attacker takes 1 damage |
-| FAIL | No damage |
-| PARTIAL | Defender: 1 damage |
-| SUCCESS | Defender: 2 damage |
-| GREAT | Defender: 3 damage |
-| CRITICAL | Defender: 4 damage |
+| Diff | Result | Damage |
+|------|--------|--------|
+| ≤-3 | CRITICAL_FAIL (CF) | Attacker takes 1 damage |
+| -2 | FAIL (F) | No damage |
+| -1, 0 | PARTIAL (P) | Defender: 1 damage |
+| +1 | SUCCESS (S) | Defender: 2 damage |
+| +2 | GREAT (G) | Defender: 3 damage |
+| ≥+3 | CRITICAL (C) | Defender: 4 damage |
 
 ### Movement
 
