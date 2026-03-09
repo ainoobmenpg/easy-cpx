@@ -205,3 +205,67 @@ Intelligence is gathered through:
 - React useState for local state
 - Fetch API for backend communication
 - Real-time updates on turn advancement
+
+---
+
+## Arcade Mode (Light Design)
+
+### Overview
+
+Arcade Mode is a simplified variant of Operational CPX designed for quick play sessions (15-30 minutes). It uses a fixed 12x8 grid map and simplified 2D6 dice mechanics instead of the full simulation engine.
+
+### Game Mode Flag
+
+The `Game` model includes a `game_mode` field to switch between:
+
+| Mode | Value | Description |
+|------|-------|-------------|
+| Simulation | `simulation` | Full rule engine with terrain, weather, supply, etc. |
+| Arcade | `arcade` | Simplified 2D6 rules with fixed grid |
+
+### Arcade Unit Model
+
+```python
+ArcadeUnit
+├── id: Integer
+├── game_id: ForeignKey
+├── name: String
+├── unit_type: String  # infantry, armor, artillery (simplified)
+├── side: String  # player, enemy
+├── x: Integer  # Grid position (0-11)
+├── y: Integer  # Grid position (0-7)
+├── strength: Integer  # 0-10 (simplified from 0-100)
+├── can_move: Boolean  # Action available
+├── can_attack: Boolean  # Attack available
+└── has_supplied: Boolean  # Supply action used this turn
+```
+
+### Conversion Utilities
+
+The system provides utilities to convert between Simulation and Arcade models:
+
+- `to_arcade_position(x, y)` - Convert simulation coordinates to 12x8 grid
+- `to_simulation_position(arcade_x, arcade_y)` - Convert grid to simulation coordinates
+- `arcade_unit_type(unit_type)` - Simplify unit type (infantry/armor/artillery)
+- `to_arcade_strength(strength)` - Convert 0-100 to 0-10
+- `from_arcade_strength(arcade_strength)` - Convert 0-10 to 0-100
+- `is_arcade_game(game_mode)` - Check if game is in arcade mode
+
+### Arcade Map Size
+
+Fixed 12x8 grid (96 cells total):
+- Width: 12 cells
+- Height: 8 cells
+- Used for both display and gameplay
+
+### Key Differences
+
+| Feature | Simulation | Arcade |
+|---------|------------|--------|
+| Map Size | Variable (50x30 default) | Fixed 12x8 |
+| Movement | Terrain-based costs | 1 cell per move |
+| Combat | Detailed damage calculation | 2D6 + modifiers |
+| Supply | Ammo/Fuel/Readiness tracking | Simplified action economy |
+| Units | 10+ unit types | 3 simplified types |
+| Turns | Variable phase structure | Simple: orders -> resolve -> report |
+| Duration | 30-60 minutes | 15-30 minutes |

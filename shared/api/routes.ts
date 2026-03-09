@@ -2,7 +2,8 @@
 // This file defines all API endpoints used by the application.
 // Both frontend and backend should use these definitions for consistency.
 
-import type { Game, Unit, Sitrep, ParsedOrder, AdjudicationResult } from "../types";
+// Type imports from shared types (only those not locally defined)
+import type { Unit, Sitrep, ParsedOrder, AdjudicationResult } from "../types";
 
 // API Base URL - should be set via environment variable
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";

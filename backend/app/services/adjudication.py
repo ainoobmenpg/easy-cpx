@@ -57,7 +57,73 @@ class AdjudicationCriteria:
     3. partial: Both sides take light damage
     4. failed: Defender counter-attacks successfully, attacker takes light damage
     5. major_failed: Defender counter-attacks decisively, attacker takes moderate damage
+
+    Target distribution: 突破30% / 維持50% / 押し返し20%
     """
+
+    # Initial modifier table for balanced outcomes (30% breakthrough / 50% hold / 20% pushback)
+    INITIAL_MODIFIERS = {
+        # Base attack/defense from unit type
+        "unit_type_base": {
+            "armor": {"attack": 3, "defense": 3},
+            "infantry": {"attack": 2, "defense": 2},
+            "atgm": {"attack": 3, "defense": 1},
+            "artillery": {"attack": 4, "defense": 1},
+            "air_defense": {"attack": 1, "defense": 3},
+            "recon": {"attack": 1, "defense": 2},
+            "support": {"attack": 1, "defense": 2},
+        },
+        # Terrain modifiers (applied to defender)
+        "terrain_modifier": {
+            "plain": 0,
+            "forest": 1,
+            "urban": 2,
+            "mountain": 2,
+            "hill": 1,
+            "water": -1,  # Impassable
+        },
+        # Strength modifiers (applied to attack)
+        "strength_modifier": {
+            (80, 100): 2,   # Full strength
+            (50, 79): 0,    # Moderate
+            (20, 49): -1,   # Light damage
+            (0, 19): -2,    # Heavy damage
+        },
+        # Supply modifiers
+        "supply_modifier": {
+            "full": 1,
+            "depleted": 0,
+            "exhausted": -2,
+        },
+        # Weather modifiers
+        "weather_modifier": {
+            "clear": 0,
+            "cloudy": 0,
+            "rain": -1,
+            "storm": -2,
+            "fog": -1,
+            "snow": -1,
+        },
+        # Time modifiers (night)
+        "time_modifier": {
+            "day": 0,
+            "dawn": 0,
+            "dusk": -1,
+            "night": -2,
+        },
+    }
+
+    # Target outcome distribution thresholds
+    # 突破(both perfect_success+success) = 30%
+    # 維持(partial) = 50%
+    # 押し返し(both failed+major_failed) = 20%
+    OUTCOME_THRESHOLDS = {
+        "perfect_success": {"min_score": 0.85, "min_conditions": 6},  # Breakthrough+ (~5%)
+        "success": {"min_score": 0.70, "min_conditions": 4},           # Breakthrough (~25%)
+        "partial": {"min_score": 0.52, "min_conditions": 3},           # Hold (~50%)
+        "failed": {"min_score": 0.40, "min_conditions": 2},            # Pushback (~15%)
+        "major_failed": {"min_score": 0.0, "min_conditions": 0},       # Heavy pushback (~5%)
+    }
 
     # Default conditions and their weights
     CONDITIONS = {
@@ -222,23 +288,62 @@ class AdjudicationCriteria:
         conditions_met = sum(1 for r in results.values() if r["met"])
         total_conditions = len(results)
 
-        # Determine if attacker has superior position - adjust thresholds for more balanced outcomes
-        is_superior = weighted_score >= 0.5 and conditions_met >= 4
-        is_inferior = weighted_score < 0.35 or conditions_met < 3
+        # Use OUTCOME_THRESHOLDS for balanced distribution (30%/50%/20%)
+        thresholds = cls.OUTCOME_THRESHOLDS
 
-        # 5-stage outcome determination with more balanced thresholds
-        if is_superior and conditions_met >= 6:
+        # Determine outcome using threshold-based approach
+        if weighted_score >= thresholds["perfect_success"]["min_score"] and \
+           conditions_met >= thresholds["perfect_success"]["min_conditions"]:
             outcome = "perfect_success"
-        elif is_superior and conditions_met >= 5:
+        elif weighted_score >= thresholds["success"]["min_score"] and \
+             conditions_met >= thresholds["success"]["min_conditions"]:
             outcome = "success"
-        elif weighted_score >= 0.4:
+        elif weighted_score >= thresholds["partial"]["min_score"]:
             outcome = "partial"
-        elif is_inferior or weighted_score < 0.25:
-            outcome = "major_failed"
-        else:
+        elif weighted_score >= thresholds["failed"]["min_score"]:
             outcome = "failed"
+        else:
+            outcome = "major_failed"
+
+        # Log for debugging balance
+        logger.debug(f"[BALANCE] Score: {weighted_score:.2f}, Conditions: {conditions_met}/{total_conditions} -> {outcome}")
 
         return outcome, results
+
+    @classmethod
+    def get_initial_modifiers(cls, unit: Unit) -> dict:
+        """Get initial modifiers for a unit based on its stats"""
+        unit_type = unit.unit_type.lower() if unit.unit_type else "infantry"
+        modifiers = {"attack": 0, "defense": 0}
+
+        # Get base from unit type
+        base = cls.INITIAL_MODIFIERS["unit_type_base"].get(unit_type, {"attack": 2, "defense": 2})
+        modifiers["attack"] += base["attack"]
+        modifiers["defense"] += base["defense"]
+
+        # Apply strength modifier
+        strength = unit.strength
+        for (min_str, max_str), mod in cls.INITIAL_MODIFIERS["strength_modifier"].items():
+            if min_str <= strength <= max_str:
+                modifiers["attack"] += mod
+                break
+
+        # Apply supply modifier
+        if unit.ammo:
+            ammo_mod = cls.INITIAL_MODIFIERS["supply_modifier"].get(unit.ammo.value, 0)
+            modifiers["attack"] += ammo_mod
+
+        return modifiers
+
+    @classmethod
+    def get_terrain_modifier(cls, terrain_type: str) -> int:
+        """Get terrain defense modifier"""
+        return cls.INITIAL_MODIFIERS["terrain_modifier"].get(terrain_type, 0)
+
+    @classmethod
+    def get_weather_modifier(cls, weather: str) -> int:
+        """Get weather attack modifier"""
+        return cls.INITIAL_MODIFIERS["weather_modifier"].get(weather, 0)
 
     @classmethod
     def _calculate_unit_type_bonus(cls, attacker: Unit, defenders: list[Unit]) -> float:

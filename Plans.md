@@ -185,9 +185,84 @@
 
 ---
 
+## 🟡 未着手のタスク (Arcade CPX モード)
+
+### フェーズA：基盤（Quick Wins + API）
+
+- [x] Issue #48: Quick Wins - モード切替/6ボタン/ワンクリック進行 `cc:完了` (2026-03-09)
+  - Arcade/Classicモード切替UI追加
+  - 6コマンド（MOVE/ATTACK/DEFEND/RECON/SUPPLY/STRIKE）のボタン化
+  - 次ターン進行のワンクリック化
+  - ファイル: `frontend/app/game/page.tsx`, `frontend/app/lib/api.ts`
+
+- [x] Issue #44: 軽量API - /turn/commit, /sitrep, /event/draw `cc:完了` (2026-03-09)
+  - /turn/commit: 命令→判定→更新まで一括処理
+  - /sitrep: 最新カード返却
+  - /event/draw: イベント抽選
+  - APIドキュメンテーション更新
+  - ファイル: `backend/app/api/routes.py`
+
+### フェーズB：ルール引擎
+
+- [x] Issue #40: Arcade CPXルール - 2D6判定と6コマンド導入 `cc:完了` (2026-03-09)
+  - docs/game-rules.md にArcade章を追記
+  - backend判定ロジックv1実装（フラグで切替）
+  - 最低限のユニットテスト追加
+  - ファイル: `backend/app/services/`, `docs/game-rules.md`
+
+- [ ] Issue #45: データモデル(Arcade版) - Light設計 `cc:完了`
+  - architecture.md にArcadeモデル提案を追記（フラグ、ユニットモデル、マップサイズ）
+  - Gameモデルにgame_modeフラグ追加（既存のGameMode enumを修復）
+  - ArcadeUnitモデル追加（12x8グリッド用軽量ユニット）
+  - 変換ユーティリティ追加（座標変換、ユニットタイプ変換、strength変換）
+  - ファイル: `docs/architecture.md`, `backend/app/models/__init__.py`
+  - テスト: 351件全て通過
+
+- [x] Issue #47: 初期バランス - 突破30%/維持50%/押し返し20% `cc:完了` (2026-03-09)
+  - 初期修正値のテーブル化
+  - 3シナリオで分布を手動検証
+  - 調整結果をdocs/review-game-first-2026-03-09.mdに追記
+  - ファイル: `backend/app/services/adjudication.py`, `docs/`
+
+### フェーズC：UI/UX
+
+- [x] Issue #41: UI刷新 - 12×8グリッド／凡例／直前オッズ表示 `cc:完了` (2026-03-09)
+  - Map描画の固定タイル化（12×8）
+  - 凡例パネル実装
+  - 戦闘前オodds計算の簡易UI表示
+  - ファイル: `frontend/app/game/page.tsx`
+
+- [x] Issue #42: SITREPカード - 1枚要約＋履歴スタック `cc:完了` (2026-03-09)
+  - カード1枚にテキストマップ/損耗/イベントを要約
+  - 右側に履歴スタック表示
+  - 次ターン進行を1クリックに短縮
+  - ファイル: `frontend/app/game/page.tsx`, `backend/app/services/`
+
+### フェーズD：コンテンツ
+
+- [x] Issue #43: イベントデッキ - 8〜10枚の"らしさ"実装 `cc:完了` (2026-03-09)
+  - デッキ定義（条件/効果/演出テキスト）
+  - 1ターン最大1枚の注入
+  - 影響は2D6修正か移動/行動制限に限定
+  - ファイル: `backend/app/services/event_deck.py`
+
+- [x] Issue #46: シナリオ雛形×3 - Fulda-lite / Baltic / Desert `cc:完了` (2026-03-09)
+  - docs/scenarios/ に3雛形追加
+  - 開幕2ターンで接触/5〜7ターンで決着の配置
+  - 主要目標×2 + 副目標×2 のチェックボックス
+  - ファイル: `docs/scenarios/`
+
+- [x] Issue #49: ルール早見表PNGを作成しdocsに追加 `cc:完了` (2026-03-09)
+  - 早見表PNGをdocs/に配置
+  - READMEからリンク
+  - Arcade章との整合確認
+  - ファイル: `docs/`, `README.md`
+
+---
+
 ## 📦 アーカイブ
 
-### 2026-03-08 完了分
+### 2026-03-09 P0/P1/P2完了分
 
 - [x] Reactパフォーマンス改善 (2026-03-08)
 - [x] SVGレンダリング最適化 (2026-03-08)

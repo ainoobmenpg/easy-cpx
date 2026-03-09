@@ -1796,3 +1796,146 @@ class TestRuleEngine:
         # Should have warning about out of range
         warnings = [c for c in result["changes"] if c.get("type") == "warning" and c.get("code") == "OUT_OF_RANGE"]
         assert len(warnings) > 0
+
+
+class TestAdjudicationCriteria:
+    """Test cases for AdjudicationCriteria with balanced distribution"""
+
+    def test_outcome_distribution_simulation(self, db_session):
+        """Test that outcome distribution approximates 30%/50%/20% target"""
+        from app.services.adjudication import AdjudicationCriteria
+        from app.models import Order, Unit, OrderType, UnitStatus, SupplyLevel
+
+        outcomes = {
+            "perfect_success": 0,
+            "success": 0,
+            "partial": 0,
+            "failed": 0,
+            "major_failed": 0,
+        }
+
+        # Run 100 simulations with random conditions - diverse scenarios
+        weathers = ["clear", "cloudy", "rain", "storm"]
+        times = ["06:00", "12:00", "18:00", "23:00"]
+        supply_levels = [SupplyLevel.FULL, SupplyLevel.DEPLETED, SupplyLevel.EXHAUSTED]
+        unit_types = ["armor", "infantry", "artillery", "atgm"]
+
+        for i in range(100):
+            # Create a mock order
+            order = Order(
+                order_type=OrderType.ATTACK,
+                intent="Test attack"
+            )
+
+            # Vary unit types and supply
+            attacker_type = unit_types[i % len(unit_types)]
+            defender_type = unit_types[(i + 2) % len(unit_types)]
+
+            # Vary conditions - create diverse scenarios
+            weather = weathers[i % len(weathers)]
+            time_str = times[i % len(times)]
+            ammo = supply_levels[i % len(supply_levels)]
+            strength = 30 + (i * 7) % 70  # Vary strength 30-100
+
+            unit = Unit(
+                name=f"Attacker {i}",
+                unit_type=attacker_type,
+                side="player",
+                strength=strength,
+                ammo=ammo,
+                fuel=SupplyLevel.FULL,
+                readiness=SupplyLevel.FULL,
+            )
+
+            target_strength = 30 + ((i + 5) * 11) % 70
+            target = Unit(
+                name=f"Defender {i}",
+                unit_type=defender_type,
+                side="enemy",
+                strength=target_strength,
+                ammo=SupplyLevel.FULL,
+                fuel=SupplyLevel.FULL,
+                readiness=SupplyLevel.FULL,
+            )
+
+            # Vary conditions
+            game_state = {"turn": 1, "weather": weather}
+
+            outcome, _ = AdjudicationCriteria.evaluate_order(
+                order, unit, [target], game_state, weather, time_str
+            )
+            outcomes[outcome] += 1
+
+        total = sum(outcomes.values())
+        breakthrough = outcomes["perfect_success"] + outcomes["success"]
+        hold = outcomes["partial"]
+        pushback = outcomes["failed"] + outcomes["major_failed"]
+
+        breakthrough_pct = (breakthrough / total) * 100
+        hold_pct = (hold / total) * 100
+        pushback_pct = (pushback / total) * 100
+
+        # Verify distribution is approximately in the right range
+        # Target: Breakthrough 20-40%, Hold 35-65%, Pushback 10-30%
+        assert 20 <= breakthrough_pct <= 40, f"Breakthrough {breakthrough_pct}% not in 20-40%"
+        assert 35 <= hold_pct <= 65, f"Hold {hold_pct}% not in 35-65%"
+        assert 10 <= pushback_pct <= 30, f"Pushback {pushback_pct}% not in 10-30%"
+
+    def test_initial_modifiers_table(self):
+        """Test that initial modifiers table is properly defined"""
+        from app.services.adjudication import AdjudicationCriteria
+
+        # Check that all modifier tables exist
+        assert "unit_type_base" in AdjudicationCriteria.INITIAL_MODIFIERS
+        assert "terrain_modifier" in AdjudicationCriteria.INITIAL_MODIFIERS
+        assert "strength_modifier" in AdjudicationCriteria.INITIAL_MODIFIERS
+        assert "supply_modifier" in AdjudicationCriteria.INITIAL_MODIFIERS
+        assert "weather_modifier" in AdjudicationCriteria.INITIAL_MODIFIERS
+        assert "time_modifier" in AdjudicationCriteria.INITIAL_MODIFIERS
+
+        # Check outcome thresholds
+        assert "perfect_success" in AdjudicationCriteria.OUTCOME_THRESHOLDS
+        assert "success" in AdjudicationCriteria.OUTCOME_THRESHOLDS
+        assert "partial" in AdjudicationCriteria.OUTCOME_THRESHOLDS
+        assert "failed" in AdjudicationCriteria.OUTCOME_THRESHOLDS
+        assert "major_failed" in AdjudicationCriteria.OUTCOME_THRESHOLDS
+
+    def test_get_initial_modifiers(self, db_session, sample_game):
+        """Test get_initial_modifiers helper method"""
+        from app.services.adjudication import AdjudicationCriteria
+
+        unit = Unit(
+            game_id=sample_game.id,
+            name="Test Unit",
+            unit_type="armor",
+            side="player",
+            x=10,
+            y=25,
+            status=UnitStatus.INTACT,
+            ammo=SupplyLevel.FULL,
+            fuel=SupplyLevel.FULL,
+            readiness=SupplyLevel.FULL,
+            strength=80
+        )
+
+        modifiers = AdjudicationCriteria.get_initial_modifiers(unit)
+
+        assert "attack" in modifiers
+        assert "defense" in modifiers
+        assert modifiers["attack"] >= 3  # Base armor attack
+
+    def test_get_terrain_modifier(self):
+        """Test terrain modifier helper"""
+        from app.services.adjudication import AdjudicationCriteria
+
+        assert AdjudicationCriteria.get_terrain_modifier("urban") == 2
+        assert AdjudicationCriteria.get_terrain_modifier("forest") == 1
+        assert AdjudicationCriteria.get_terrain_modifier("plain") == 0
+
+    def test_get_weather_modifier(self):
+        """Test weather modifier helper"""
+        from app.services.adjudication import AdjudicationCriteria
+
+        assert AdjudicationCriteria.get_weather_modifier("clear") == 0
+        assert AdjudicationCriteria.get_weather_modifier("rain") == -1
+        assert AdjudicationCriteria.get_weather_modifier("storm") == -2

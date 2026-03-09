@@ -1,5 +1,7 @@
 # Game Rules
 
+> Quick Reference: See [quick-ref.md](./quick-ref.md) for arcade mode summary
+
 ## Turn System
 
 The game operates on a turn-based system where each turn represents approximately 15 minutes of game time.
@@ -143,3 +145,148 @@ The game continues until one side achieves:
 - Elimination of all enemy units
 - Occupation of key objectives
 - Mutual exhaustion (stalemate)
+
+---
+
+## Arcade Mode
+
+Arcade mode provides a simplified, faster-paced experience using 2D6 dice rolls and a streamlined command set.
+
+### Game Mode Selection
+
+| Mode | Description |
+|------|-------------|
+| SIMULATION | Full rule engine with complex factors |
+| ARCADE | Simplified 2D6 system for quick battles |
+
+### 2D6 Judgment System
+
+Combat and actions are resolved using 2 six-sided dice (2D6).
+
+#### Base Roll Table
+
+| Roll | Result | Description |
+|------|--------|-------------|
+| 2 | CRITICAL_FAIL | Complete failure, potential unit damage |
+| 3-4 | FAIL | Action failed |
+| 5-6 | PARTIAL | Mixed results |
+| 7-8 | SUCCESS | Action succeeded |
+| 9-10 | GREAT | Strong success |
+| 11-12 | CRITICAL | Exceptional result |
+
+#### Modifiers
+
+| Factor | Modifier |
+|--------|----------|
+| Terrain Advantage (Defense) | +1 |
+| Strength 80+ | +1 |
+| Strength 50-79 | 0 |
+| Strength below 50 | -1 |
+| Weather: Rain/Storm | -1 |
+| Night Combat | -1 |
+| Initiative (Attack First) | +1 |
+| Superior Numbers (2:1) | +1 |
+| Supply Depleted | -1 |
+| Supply Exhausted | -2 |
+
+#### Modified Roll Table
+
+| Modified Roll | Result |
+|---------------|--------|
+| 2-3 | CRITICAL_FAIL |
+| 4-5 | FAIL |
+| 6-7 | PARTIAL |
+| 8-9 | SUCCESS |
+| 10-11 | GREAT |
+| 12+ | CRITICAL |
+
+### Arcade Commands (6 Commands)
+
+| Command | Description | Dice Roll |
+|---------|-------------|-----------|
+| ATTACK | Offensive action | Attack vs Defense |
+| MOVE | Relocate unit | Movement check |
+| DEFEND | Hold position | Defense bonus |
+| RECON | Gather intelligence | Recon roll |
+| SUPPLY | Request logistics | Supply check |
+| WAIT | Hold action | No roll |
+
+### Combat Resolution
+
+1. Attacker declares target
+2. Calculate attacker's attack rating (base + modifiers)
+3. Calculate defender's defense rating (base + modifiers)
+4. Roll 2D6 + attacker's attack rating
+5. Compare to 2D6 + defender's defense rating
+6. Higher total wins
+
+#### Damage Table
+
+| Result | Damage to Defender |
+|--------|-------------------|
+| CRITICAL_FAIL | Attacker takes 1 damage |
+| FAIL | No damage |
+| PARTIAL | Defender: 1 damage |
+| SUCCESS | Defender: 2 damage |
+| GREAT | Defender: 3 damage |
+| CRITICAL | Defender: 4 damage |
+
+### Movement
+
+| Terrain | Cells per Turn |
+|---------|----------------|
+| Plain | 4 |
+| Forest | 2 |
+| Urban | 2 |
+| Mountain | 1 |
+| Water | 0 (impassable) |
+
+### Unit Stats (Arcade)
+
+| Type | Attack | Defense | Move | HP |
+|------|--------|---------|------|-----|
+| INFANTRY | 3 | 3 | 2 | 3 |
+| ARMOR | 4 | 4 | 3 | 4 |
+| ARTILLERY | 5 | 2 | 2 | 2 |
+| AIR_DEFENSE | 2 | 4 | 2 | 3 |
+| RECON | 2 | 2 | 4 | 2 |
+| SUPPORT | 1 | 3 | 3 | 4 |
+
+### Quick Turn Flow
+
+1. Issue commands to units (6 commands)
+2. Resolve all MOVE orders
+3. Resolve all ATTACK orders
+4. Apply damage and remove destroyed units
+5. Generate brief SITREP
+6. Advance to next turn
+
+### Fog of War (Arcade)
+
+Arcade mode uses simplified fog of war:
+
+- **Visible**: Adjacent cells (1 cell radius)
+- **Known**: Previously observed locations
+- **Unknown**: All other areas
+
+### Victory Conditions (Arcade)
+
+| Condition | Description |
+|-----------|-------------|
+| Elimination | Destroy all enemy units |
+| Breakthrough | Reach opposite edge of map |
+| Points | 10 points per unit destroyed |
+
+---
+
+## Command Reference
+
+### Simulation Mode Commands
+
+- MOVE, ATTACK, DEFEND, SUPPORT, RETREAT, RECON, SUPPLY, SPECIAL
+- Three levels: TACTICAL, OPERATIONAL, STRATEGIC
+
+### Arcade Mode Commands
+
+- ATTACK, MOVE, DEFEND, RECON, SUPPLY, WAIT
+- No levels, simple execution

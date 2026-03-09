@@ -212,6 +212,11 @@ class ReconConfidence(enum.Enum):
     FALSE = "false"            # Known to be false
 
 
+class GameMode(enum.Enum):
+    SIMULATION = "simulation"  # Full rule engine
+    ARCADE = "arcade"  # Simplified 2D6 rules
+
+
 class Game(Base):
     __tablename__ = "games"
 
@@ -225,6 +230,7 @@ class Game(Base):
     phase = Column(String, default="orders")  # orders, adjudication, sitrep
     is_active = Column(Boolean, default=True)
     scenario_id = Column(String, nullable=True)  # Scenario ID for this game
+    game_mode = Column(Enum(GameMode), default=GameMode.SIMULATION)  # simulation or arcade
 
     # Terrain data - stored as JSON to persist across turns
     terrain_data = Column(JSON, nullable=True)
@@ -239,6 +245,25 @@ class Game(Base):
     player_knowledge = relationship("PlayerKnowledge", back_populates="game", cascade="all, delete-orphan")
     enemy_knowledge = relationship("EnemyKnowledge", back_populates="game", cascade="all, delete-orphan")
     commander_orders = relationship("CommanderOrder", back_populates="game", cascade="all, delete-orphan")
+
+
+# Arcade-specific simplified unit data (lightweight version)
+class ArcadeUnit(Base):
+    __tablename__ = "arcade_units"
+
+    id = Column(Integer, primary_key=True, index=True)
+    game_id = Column(Integer, ForeignKey("games.id"))
+    name = Column(String, nullable=False)
+    unit_type = Column(String, nullable=False)  # infantry, armor, artillery
+    side = Column(String, nullable=False)  # player, enemy
+    x = Column(Integer, nullable=False)  # Grid position (0-11)
+    y = Column(Integer, nullable=False)  # Grid position (0-7)
+    strength = Column(Integer, default=10)  # 0-10 (simplified from 0-100)
+    can_move = Column(Boolean, default=True)
+    can_attack = Column(Boolean, default=True)
+    has_supplied = Column(Boolean, default=False)  # Supply action used
+
+    game = relationship("Game")
 
 
 class Unit(Base):
@@ -440,3 +465,118 @@ class CommanderOrder(Base):
     superseded_by = Column(Integer, ForeignKey("commander_orders.id"), nullable=True)
 
     game = relationship("Game", back_populates="commander_orders")
+
+
+# =============================================================================
+# Arcade Model Conversion Utilities
+# =============================================================================
+
+# Arcade map size (fixed 12x8 grid)
+ARCADE_MAP_WIDTH = 12
+ARCADE_MAP_HEIGHT = 8
+
+# Unit type mapping: simulation -> arcade
+# Infantry types -> infantry
+# Armor types -> armor
+# Artillery types -> artillery
+# Air/Air Defense -> simplified to basic types
+ARCADE_UNIT_TYPE_MAP: dict[str, str] = {
+    "infantry": "infantry",
+    "armor": "armor",
+    "atgm": "infantry",
+    "sniper": "infantry",
+    "scout": "infantry",
+    "recon": "infantry",
+    "artillery": "artillery",
+    "air_defense": "armor",  # Simplified
+    "attack_helo": "armor",  # Simplified
+    "transport_helo": "armor",  # Simplified
+    "aircraft": "armor",  # Simplified
+    "uav": "infantry",  # Simplified
+    "support": "infantry",
+}
+
+
+def to_arcade_position(x: float, y: float, map_width: int = 50, map_height: int = 30) -> tuple[int, int]:
+    """Convert simulation coordinates to arcade grid (12x8).
+
+    Args:
+        x: Simulation x coordinate
+        y: Simulation y coordinate
+        map_width: Original map width (default 50)
+        map_height: Original map height (default 30)
+
+    Returns:
+        Tuple of (arcade_x, arcade_y) in range (0-11, 0-7)
+    """
+    arcade_x = min(int(x / map_width * ARCADE_MAP_WIDTH), ARCADE_MAP_WIDTH - 1)
+    arcade_y = min(int(y / map_height * ARCADE_MAP_HEIGHT), ARCADE_MAP_HEIGHT - 1)
+    return (arcade_x, arcade_y)
+
+
+def to_simulation_position(arcade_x: int, arcade_y: int, map_width: int = 50, map_height: int = 30) -> tuple[float, float]:
+    """Convert arcade grid to simulation coordinates.
+
+    Args:
+        arcade_x: Arcade grid x (0-11)
+        arcade_y: Arcade grid y (0-7)
+        map_width: Target map width (default 50)
+        map_height: Target map height (default 30)
+
+    Returns:
+        Tuple of (sim_x, sim_y)
+    """
+    sim_x = (arcade_x + 0.5) / ARCADE_MAP_WIDTH * map_width
+    sim_y = (arcade_y + 0.5) / ARCADE_MAP_HEIGHT * map_height
+    return (sim_x, sim_y)
+
+
+def arcade_unit_type(unit_type: str) -> str:
+    """Convert simulation unit type to arcade simplified type.
+
+    Args:
+        unit_type: Simulation unit type string
+
+    Returns:
+        Arcade unit type: "infantry", "armor", or "artillery"
+    """
+    normalized = normalize_unit_type(unit_type)
+    return ARCADE_UNIT_TYPE_MAP.get(normalized, "infantry")
+
+
+def to_arcade_strength(strength: int) -> int:
+    """Convert simulation strength (0-100) to arcade (0-10).
+
+    Args:
+        strength: Simulation strength value (0-100)
+
+    Returns:
+        Arcade strength (0-10)
+    """
+    return max(0, min(10, int(strength / 10)))
+
+
+def from_arcade_strength(arcade_strength: int) -> int:
+    """Convert arcade strength (0-10) to simulation (0-100).
+
+    Args:
+        arcade_strength: Arcade strength value (0-10)
+
+    Returns:
+        Simulation strength (0-100)
+    """
+    return arcade_strength * 10
+
+
+def is_arcade_game(game_mode: GameMode | str) -> bool:
+    """Check if game mode is arcade.
+
+    Args:
+        game_mode: GameMode enum or string
+
+    Returns:
+        True if arcade mode
+    """
+    if isinstance(game_mode, str):
+        return game_mode == "arcade"
+    return game_mode == GameMode.ARCADE

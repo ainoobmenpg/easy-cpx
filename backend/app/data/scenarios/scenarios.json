@@ -357,5 +357,193 @@
       "player": {"x": 1, "y": 0},
       "enemy": {"x": -1, "y": 0}
     }
+  },
+  {
+    "id": "fulda-lite",
+    "name": "フルダ・ギャップ",
+    "description": "冷戦シナリオ。フルダGapを防御し、Warsaw Pactの進撃を阻止せよ。",
+    "difficulty": "normal",
+    "map_size": {
+      "width": 50,
+      "height": 40
+    },
+    "terrain_seed": 4001,
+    "player_forces": {
+      "infantry": 4,
+      "armor": 3,
+      "artillery": 2,
+      "reconnaissance": 2,
+      "air_defense": 1
+    },
+    "enemy_forces": {
+      "infantry": 3,
+      "armor": 4,
+      "artillery": 2,
+      "reconnaissance": 2
+    },
+    "objectives": [
+      {
+        "id": "obj_fulda_main_1",
+        "type": "hold",
+        "target": "river_crossing",
+        "description": "河畔の渡河点を4ターン維持",
+        "success_condition": "crossing_held",
+        "turns_to_complete": 4
+      },
+      {
+        "id": "obj_fulda_main_2",
+        "type": "destroy",
+        "target": "enemy_armor",
+        "description": "敵装甲部隊を撃破",
+        "success_condition": "armor_destroyed",
+        "min_targets": 3
+      },
+      {
+        "id": "obj_fulda_sub_1",
+        "type": "capture",
+        "target": "enemy_artillery",
+        "description": "敵砲兵を鹵獲",
+        "success_condition": "artillery_captured"
+      },
+      {
+        "id": "obj_fulda_sub_2",
+        "type": "maintain",
+        "target": "supply_line",
+        "description": "補給線を維持",
+        "success_condition": "supply_maintained"
+      }
+    ],
+    "initial_weather": "clear",
+    "start_date": "2026-03-06",
+    "start_time": "05:40",
+    "advance_directions": {
+      "player": {"x": 1, "y": 0},
+      "enemy": {"x": -1, "y": 0}
+    }
+  },
+  {
+    "id": "baltic",
+    "name": "バルト海岸",
+    "description": "バルト海沿岸の都市戦闘。海岸線を確保し、敵の包囲を撃破せよ。",
+    "difficulty": "hard",
+    "map_size": {
+      "width": 60,
+      "height": 50
+    },
+    "terrain_seed": 4002,
+    "player_forces": {
+      "infantry": 5,
+      "armor": 2,
+      "artillery": 2,
+      "reconnaissance": 3,
+      "air_defense": 2
+    },
+    "enemy_forces": {
+      "infantry": 4,
+      "armor": 3,
+      "artillery": 3,
+      "reconnaissance": 2
+    },
+    "objectives": [
+      {
+        "id": "obj_baltic_main_1",
+        "type": "hold",
+        "target": "coastal_town",
+        "description": "海岸都市を4ターン確保",
+        "success_condition": "town_secured",
+        "turns_to_complete": 4
+      },
+      {
+        "id": "obj_baltic_main_2",
+        "type": "maintain",
+        "target": "supply_route",
+        "description": "補給路を確保",
+        "success_condition": "supply_route_open"
+      },
+      {
+        "id": "obj_baltic_sub_1",
+        "type": "destroy",
+        "target": "enemy_artillery",
+        "description": "敵砲兵を撃破",
+        "success_condition": "artillery_destroyed"
+      },
+      {
+        "id": "obj_baltic_sub_2",
+        "type": "capture",
+        "target": "enemy_recon",
+        "description": "敵偵察を鹵獲",
+        "success_condition": "recon_captured"
+      }
+    ],
+    "initial_weather": "cloudy",
+    "start_date": "2026-03-07",
+    "start_time": "06:00",
+    "advance_directions": {
+      "player": {"x": -1, "y": 0},
+      "enemy": {"x": 1, "y": 0}
+    }
+  },
+  {
+    "id": "desert",
+    "name": "砂漠の嵐",
+    "description": "砂漠での快速機動戦。オアシスを確保し、敵増援到着前に決着せよ。",
+    "difficulty": "easy",
+    "map_size": {
+      "width": 70,
+      "height": 50
+    },
+    "terrain_seed": 4003,
+    "player_forces": {
+      "infantry": 2,
+      "armor": 4,
+      "artillery": 2,
+      "reconnaissance": 3,
+      "air_defense": 1
+    },
+    "enemy_forces": {
+      "infantry": 3,
+      "armor": 3,
+      "artillery": 2,
+      "reconnaissance": 2
+    },
+    "objectives": [
+      {
+        "id": "obj_desert_main_1",
+        "type": "capture",
+        "target": "oasis",
+        "description": "オアシスを5ターン目に確保",
+        "success_condition": "oasis_captured",
+        "turns_to_complete": 5
+      },
+      {
+        "id": "obj_desert_main_2",
+        "type": "destroy",
+        "target": "enemy_armor",
+        "description": "敵装甲予備を撃破",
+        "success_condition": "armor_reserve_destroyed",
+        "min_targets": 2
+      },
+      {
+        "id": "obj_desert_sub_1",
+        "type": "secure",
+        "target": "wadi_crossing",
+        "description": "ワディ渡河点を確保",
+        "success_condition": "crossing_secured"
+      },
+      {
+        "id": "obj_desert_sub_2",
+        "type": "maintain",
+        "target": "unit_strength",
+        "description": "部隊戦力を70%以上維持",
+        "success_condition": "strength_maintained"
+      }
+    ],
+    "initial_weather": "clear",
+    "start_date": "2026-03-08",
+    "start_time": "05:00",
+    "advance_directions": {
+      "player": {"x": 1, "y": 0},
+      "enemy": {"x": -1, "y": 0}
+    }
   }
 ]

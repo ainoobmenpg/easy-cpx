@@ -115,6 +115,10 @@ const UnitMarker = memo(function UnitMarker({
   );
 });
 
+// Grid constants - 12x8 fixed grid per Issue #41
+const GRID_WIDTH = 12;
+const GRID_HEIGHT = 8;
+
 function GameContent() {
   const searchParams = useSearchParams();
   const gameIdParam = searchParams.get('gameId');
@@ -122,6 +126,7 @@ function GameContent() {
   const [gameId, setGameId] = useState<number | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [sitrep, setSitrep] = useState<Sitrep | null>(null);
+  const [sitrepHistory, setSitrepHistory] = useState<Sitrep[]>([]); // SITREP history stack
   const [orderInput, setOrderInput] = useState('');
   const [parsedOrder, setParsedOrder] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -131,6 +136,10 @@ function GameContent() {
   const [zoom, setZoom] = useState(1);
   const [showExactPosition, setShowExactPosition] = useState(false); // FoW debug: show exact position markers
   const [error, setError] = useState<string | null>(null);
+  const [showLegend, setShowLegend] = useState(false);
+  const [battleOdds, setBattleOdds] = useState<{ attacker: string; defender: string; odds: string; details: string } | null>(null);
+  const [gameMode, setGameMode] = useState<'classic' | 'arcade'>('classic'); // Game mode: classic (text) or arcade (buttons)
+  const [activeTab, setActiveTab] = useState<'info' | 'logs' | 'history'>('info'); // Right sidebar tab
   // Map pan state (for drag to pan)
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
@@ -225,6 +234,36 @@ function GameContent() {
     setLoading(false);
   };
 
+  // Arcade mode: quick command submission
+  const submitArcadeCommand = async (command: string) => {
+    if (!selectedUnit || gameId === null) return;
+    setLoading(true);
+    try {
+      // Map arcade commands to order types
+      const orderTypeMap: Record<string, string> = {
+        'move': 'move',
+        'attack': 'attack',
+        'defend': 'defend',
+        'recon': 'recon',
+        'supply': 'supply',
+        'strike': 'special',
+      };
+      const orderType = orderTypeMap[command] || 'move';
+      await fetch(API.orders, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          unit_id: selectedUnit.id,
+          order_type: orderType,
+          intent: `Arcade command: ${command}`,
+        })
+      });
+      setSelectedUnit(null);
+      fetchGameState();
+    } catch (e) { console.error('Failed to submit arcade command:', e); }
+    setLoading(false);
+  };
+
   const advanceTurn = async () => {
     if (gameId === null) return;
     setLoading(true);
@@ -235,7 +274,11 @@ function GameContent() {
         body: JSON.stringify({ game_id: gameId })
       });
       const data = await res.json();
-      setSitrep(data.sitrep);
+      // Save current sitrep to history before updating
+      if (data.sitrep) {
+        setSitrepHistory(prev => [data.sitrep, ...prev].slice(0, 5)); // Keep last 5
+        setSitrep(data.sitrep);
+      }
       setGameState(prev => prev ? { ...prev, turn: data.turn + 1, time: data.next_time } : null);
 
       // Refresh game state including units after turn advancement
@@ -289,7 +332,7 @@ function GameContent() {
   const endGame = async () => {
     if (gameId === null || !confirm('End the game and view debriefing?')) return;
     try {
-      await fetch(API.gameEnd, {
+      await fetch(API.gameEnd(gameId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ game_id: gameId })
@@ -329,17 +372,17 @@ function GameContent() {
   const handleZoomOut = useCallback(() => setZoom(z => Math.max(0.5, z - 0.2)), []);
   const handleZoomReset = useCallback(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, []);
 
-  // Memoized grid lines as single path elements (was 124 line elements)
+  // Memoized grid lines for 12x8 grid per Issue #41
   const gridLines = useMemo(() => {
     // Minor grid lines (every 1 unit)
     let minorPath = '';
-    for (let i = 0; i <= 50; i++) {
-      minorPath += `M${i},0 V50 M0,${i} H50`;
+    for (let i = 0; i <= GRID_WIDTH; i++) {
+      minorPath += `M${i},0 V${GRID_HEIGHT} M0,${i} H${GRID_WIDTH}`;
     }
-    // Major grid lines (every 5 units)
+    // Major grid lines (every 3 units for 12x8)
     let majorPath = '';
-    for (let i = 0; i <= 50; i += 5) {
-      majorPath += `M${i},0 V50 M0,${i} H50`;
+    for (let i = 0; i <= GRID_HEIGHT; i += 3) {
+      majorPath += `M${i},0 V${GRID_HEIGHT} M0,${i} H${GRID_WIDTH}`;
     }
     return { minorPath, majorPath };
   }, []);
@@ -369,12 +412,63 @@ function GameContent() {
     }).filter(Boolean);
   }, [gameState?.terrain, gameState?.terrain_info]);
 
-  // Memoized unit select handler
+  // Memoized unit select handler with battle odds calculation
   const handleUnitSelect = useCallback((unit: Unit) => {
     // Don't select unit if user was panning (dragging)
     if (didPan) return;
     setSelectedUnit(unit);
-  }, [didPan]);
+
+    // Calculate battle odds if player unit selected and enemy in range
+    if (unit.side === 'player' && gameState?.units) {
+      const enemies = gameState.units.filter(u => u.side === 'enemy' && u.status !== 'destroyed');
+      let closestEnemy: Unit | null = null;
+      let closestDist = Infinity;
+
+      for (const enemy of enemies) {
+        const dist = Math.sqrt(Math.pow(unit.x - enemy.x, 2) + Math.pow(unit.y - enemy.y, 2));
+        if (dist < closestDist && dist <= 3) {
+          closestDist = dist;
+          closestEnemy = enemy;
+        }
+      }
+
+      if (closestEnemy) {
+        const playerStrength = unit.strength * (unit.status === 'intact' ? 1.0 : unit.status === 'light_damage' ? 0.75 : 0.5);
+        const enemyStrength = closestEnemy.strength * (closestEnemy.status === 'intact' ? 1.0 : closestEnemy.status === 'light_damage' ? 0.75 : 0.5);
+        const ratio = playerStrength / enemyStrength;
+
+        let odds: string;
+        let details: string;
+        if (ratio >= 2) {
+          odds = '有利';
+          details = `${Math.round(playerStrength)} vs ${Math.round(enemyStrength)}`;
+        } else if (ratio >= 1.2) {
+          odds = '稍有利';
+          details = `${Math.round(playerStrength)} vs ${Math.round(enemyStrength)}`;
+        } else if (ratio >= 0.8) {
+          odds = '五分';
+          details = `${Math.round(playerStrength)} vs ${Math.round(enemyStrength)}`;
+        } else if (ratio >= 0.5) {
+          odds = '稍不利';
+          details = `${Math.round(playerStrength)} vs ${Math.round(enemyStrength)}`;
+        } else {
+          odds = '不利';
+          details = `${Math.round(playerStrength)} vs ${Math.round(enemyStrength)}`;
+        }
+
+        setBattleOdds({
+          attacker: unit.name,
+          defender: closestEnemy.name,
+          odds,
+          details: `${closestEnemy.name}まで${closestDist.toFixed(1)}グリッド - ${details}`
+        });
+      } else {
+        setBattleOdds(null);
+      }
+    } else {
+      setBattleOdds(null);
+    }
+  }, [didPan, gameState?.units]);
 
   // Memoized unit list for rendering
   const unitList = useMemo(() => gameState?.units || [], [gameState?.units]);
@@ -492,6 +586,9 @@ function GameContent() {
           <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">作戦級CPX</h1>
           <button onClick={() => router.push('/games')} aria-label="ゲーム一覧" className="text-xs bg-gray-700/50 hover:bg-gray-600/50 px-3 py-1 rounded backdrop-blur transition-colors">一覧</button>
           <button onClick={() => setShowHelp(!showHelp)} aria-label="ヘルプ表示切替" className="text-xs bg-gray-700/50 hover:bg-gray-600/50 px-3 py-1 rounded backdrop-blur transition-colors">{showHelp ? 'ガイド' : '表示'}</button>
+          <button onClick={() => setGameMode(m => m === 'classic' ? 'arcade' : 'classic')} aria-label="モード切替" className={`text-xs px-3 py-1 rounded backdrop-blur transition-colors font-medium ${gameMode === 'arcade' ? 'bg-purple-600/80 text-white' : 'bg-gray-700/50 hover:bg-gray-600/50'}`}>
+            {gameMode === 'classic' ? 'Classic' : 'Arcade'}
+          </button>
         </div>
         <div className="flex gap-6 text-sm items-center">
           <span className="text-gray-400 font-medium">{gameState.date}</span>
@@ -545,7 +642,7 @@ function GameContent() {
             style={{ clipPath: 'inset(0 0 0 0)' }}
           >
             <svg
-              viewBox="0 0 50 50"
+              viewBox={`0 0 ${GRID_WIDTH} ${GRID_HEIGHT}`}
               className="w-full h-full"
               style={{
                 background: gameState.is_night ? '#0f172a' : '#1e293b',
@@ -594,6 +691,9 @@ function GameContent() {
             <button onClick={() => setShowExactPosition(!showExactPosition)} aria-label="FoWデバッグ表示切替" className={`w-9 h-9 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30 ${showExactPosition ? 'bg-purple-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="FoW debug: Show exact positions">
               FoW
             </button>
+            <button onClick={() => setShowLegend(!showLegend)} aria-label="凡例表示切替" className={`w-9 h-9 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30 ${showLegend ? 'bg-cyan-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="Legend">
+              凡例
+            </button>
           </div>
 
           {/* Map Info - modern style */}
@@ -602,6 +702,71 @@ function GameContent() {
             <span className="text-red-400 font-medium">敵軍: {gameState.units.filter(u => u.side === 'enemy').length}</span>
             <span className="text-gray-400">ズーム: {Math.round(zoom * 100)}%</span>
           </div>
+
+          {/* Legend Panel - Issue #41 */}
+          {showLegend && (
+            <div className="absolute top-3 left-3 bg-gray-900/95 backdrop-blur p-3 rounded-lg text-xs border border-cyan-700/50 z-20 shadow-xl">
+              <div className="font-bold text-cyan-300 mb-2 border-b border-gray-700/50 pb-1">凡例</div>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded bg-blue-500"></div>
+                  <span className="text-gray-300">自軍</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded bg-red-500"></div>
+                  <span className="text-gray-300">敵軍</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400">✕ 歩兵</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400">⇒ 装甲</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400">+ 砲兵</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400">◇ 偵察</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-yellow-500 text-[10px] border border-yellow-500/50 rounded px-0.5">?</span>
+                  <span className="text-gray-300">推定位置</span>
+                </div>
+                <div className="mt-2 pt-1 border-t border-gray-700/50">
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                    <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
+                    <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                    <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                    <div className="w-2 h-2 rounded-full bg-gray-500"></div>
+                  </div>
+                  <div className="text-gray-500 text-[10px]">無→壊</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Battle Odds Display - Issue #41 */}
+          {battleOdds && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-gray-900/95 backdrop-blur p-3 rounded-lg text-xs border border-purple-700/50 z-20 shadow-xl">
+              <div className="font-bold text-purple-300 mb-1 text-center">戦闘オッドン</div>
+              <div className="flex items-center justify-center gap-3">
+                <span className="text-blue-400 font-medium">{battleOdds.attacker}</span>
+                <span className="text-gray-400">vs</span>
+                <span className="text-red-400 font-medium">{battleOdds.defender}</span>
+              </div>
+              <div className={`text-center font-bold mt-1 ${
+                battleOdds.odds === '有利' ? 'text-green-400' :
+                battleOdds.odds === '稍有利' ? 'text-lime-400' :
+                battleOdds.odds === '五分' ? 'text-yellow-400' :
+                battleOdds.odds === '稍不利' ? 'text-orange-400' :
+                'text-red-400'
+              }`}>
+                {battleOdds.odds}
+              </div>
+              <div className="text-gray-500 text-[10px] text-center mt-1">{battleOdds.details}</div>
+            </div>
+          )}
 
           {/* Terrain Tooltip */}
           {terrainTooltip && (
@@ -627,9 +792,92 @@ function GameContent() {
         <div className="bg-gray-800/90 border-l border-gray-700/50 flex flex-col shrink-0 overflow-hidden backdrop-blur-sm" style={{ width: '400px', minWidth: '400px', maxWidth: '400px' }}>
           {/* Tab system */}
           <div className="flex border-b border-gray-700/50 shrink-0">
-            <button className="flex-1 p-2 text-xs font-bold text-blue-300 border-b-2 border-blue-500 bg-blue-900/20">情報</button>
-            <button className="flex-1 p-2 text-xs font-bold text-gray-400 hover:text-gray-300">ログ</button>
+            <button onClick={() => setActiveTab('info')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'info' ? 'text-blue-300 border-blue-500 bg-blue-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>情報</button>
+            <button onClick={() => setActiveTab('history')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'history' ? 'text-blue-300 border-blue-500 bg-blue-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>履歴</button>
+            <button onClick={() => setActiveTab('logs')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'logs' ? 'text-blue-300 border-blue-500 bg-blue-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>ログ</button>
           </div>
+
+          {/* SITREP Card - shown on info tab */}
+          {activeTab === 'info' && sitrep && (
+            <div className="p-3 border-b border-gray-700/50 bg-gradient-to-r from-blue-900/30 to-purple-900/30 shrink-0">
+              <div className="flex justify-between items-center mb-2">
+                <span className="font-bold text-sm text-cyan-300">■ SITREP T{sitrep.turn}</span>
+                <span className="text-[10px] text-gray-400">{new Date(sitrep.timestamp).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+              {/* Display sections by type */}
+              <div className="space-y-2 text-xs">
+                {sitrep.sections?.map((section, idx) => (
+                  <div key={idx} className="bg-gray-800/50 rounded p-2">
+                    <div className="text-gray-400 text-[10px] mb-1">
+                      {section.type === 'overview' && '戦況'}
+                      {section.type === 'unit_status' && '損害'}
+                      {section.type === 'enemy_activity' && '敵行動'}
+                      {section.type === 'logistics' && '補給'}
+                      {section.type === 'orders_result' && '命令結果'}
+                      {section.type === 'friction' && '摩擦'}
+                      {section.type === 'command' && '命令'}
+                    </div>
+                    <div className="text-gray-200 line-clamp-2">{section.content}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* SITREP History - previous sitreps */}
+          {activeTab === 'info' && sitrepHistory.length > 0 && (
+            <div className="p-2 border-b border-gray-700/50 bg-gray-800/30 shrink-0">
+              <div className="text-[10px] text-gray-500 mb-1">履歴</div>
+              <div className="flex gap-1 overflow-x-auto">
+                {sitrepHistory.map((hist, idx) => (
+                  <button key={idx} onClick={() => setSitrep(hist)}
+                    className="text-[10px] px-2 py-1 bg-gray-700/50 hover:bg-gray-600/50 rounded text-gray-400 shrink-0">
+                    T{hist.turn}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* SITREP History Stack - shown on history tab */}
+          {activeTab === 'history' && (
+            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+              <h3 className="font-bold text-sm mb-3 text-cyan-300 border-b border-gray-700/50 pb-2">■ SITREP履歴スタック</h3>
+              {sitrepHistory.length > 0 ? (
+                <div className="space-y-3">
+                  {sitrepHistory.map((histSitrep, idx) => (
+                    <div
+                      key={histSitrep.turn}
+                      onClick={() => setSitrep(histSitrep)}
+                      className={`p-3 rounded-lg cursor-pointer transition-all border ${
+                        idx === 0
+                          ? 'bg-purple-900/40 border-purple-500/50'
+                          : 'bg-gray-800/40 border-gray-700/30 hover:border-gray-600/50'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="font-bold text-sm text-cyan-300">■ SITREP T{histSitrep.turn}</span>
+                        {idx === 0 && <span className="text-[10px] px-1.5 py-0.5 bg-purple-600/50 rounded text-purple-200">最新</span>}
+                      </div>
+                      {/* Quick summary - access sections as array */}
+                      <div className="text-xs text-gray-400 space-y-1">
+                        {histSitrep.sections?.filter(s => s.type === 'overview').slice(0, 1).map((section, i) => (
+                          <div key={i} className="line-clamp-2">{section.content}</div>
+                        ))}
+                        {histSitrep.sections && histSitrep.sections.length > 0 && (
+                          <div className="text-yellow-400 text-[10px]">
+                            {histSitrep.sections.length}セクション
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-xs">ターン進行で履歴が追加されます</p>
+              )}
+            </div>
+          )}
 
           {selectedUnit ? (
             <div className="p-3 border-b border-gray-700/50 bg-blue-900/20 shrink-0">
@@ -675,15 +923,41 @@ function GameContent() {
                   <span className="text-gray-300">X:{selectedUnit.x.toFixed(1)} Y:{selectedUnit.y.toFixed(1)}</span>
                 </div>
               </div>
-              <textarea value={orderInput} onChange={(e) => setOrderInput(e.target.value)}
-                placeholder="命令を入力..." className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg p-2 text-xs h-16 mb-2 focus:border-blue-500 focus:outline-none backdrop-blur" />
-              <div className="flex gap-2">
-                <button onClick={parseOrder} disabled={loading || !orderInput.trim()} aria-label="命令を解析" className="flex-1 bg-blue-600/80 hover:bg-blue-600 disabled:bg-gray-600/50 rounded-lg p-2 text-xs font-medium transition-colors">解析</button>
-                {parsedOrder && (
-                  <button onClick={submitOrder} disabled={loading} aria-label="命令を決定" className="flex-1 bg-green-600/80 hover:bg-green-600 disabled:bg-gray-600/50 rounded-lg p-2 text-xs font-medium transition-colors">決定</button>
-                )}
-              </div>
-              {parsedOrder && (
+              {gameMode === 'arcade' ? (
+                // Arcade mode: 6 command buttons
+                <div className="space-y-2">
+                  <div className="text-xs text-purple-300 font-medium mb-1">コマンドを選択:</div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      { cmd: 'move', label: '移動', icon: '>', color: 'bg-blue-600' },
+                      { cmd: 'attack', label: '攻撃', icon: 'X', color: 'bg-red-600' },
+                      { cmd: 'defend', label: '防御', icon: 'O', color: 'bg-green-600' },
+                      { cmd: 'recon', label: '偵察', icon: '?', color: 'bg-cyan-600' },
+                      { cmd: 'supply', label: '補給', icon: '+', color: 'bg-yellow-600' },
+                      { cmd: 'strike', label: '特攻', icon: '*', color: 'bg-purple-600' },
+                    ].map((btn) => (
+                      <button key={btn.cmd} onClick={() => submitArcadeCommand(btn.cmd)} disabled={loading}
+                        className={`${btn.color} hover:opacity-90 disabled:opacity-50 rounded-lg p-2 text-xs font-bold transition-all flex flex-col items-center gap-0.5`}>
+                        <span className="text-sm">{btn.icon}</span>
+                        <span>{btn.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                // Classic mode: text input
+                <>
+                  <textarea value={orderInput} onChange={(e) => setOrderInput(e.target.value)}
+                    placeholder="命令を入力..." className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg p-2 text-xs h-16 mb-2 focus:border-blue-500 focus:outline-none backdrop-blur" />
+                  <div className="flex gap-2">
+                    <button onClick={parseOrder} disabled={loading || !orderInput.trim()} aria-label="命令を解析" className="flex-1 bg-blue-600/80 hover:bg-blue-600 disabled:bg-gray-600/50 rounded-lg p-2 text-xs font-medium transition-colors">解析</button>
+                    {parsedOrder && (
+                      <button onClick={submitOrder} disabled={loading} aria-label="命令を決定" className="flex-1 bg-green-600/80 hover:bg-green-600 disabled:bg-gray-600/50 rounded-lg p-2 text-xs font-medium transition-colors">決定</button>
+                    )}
+                  </div>
+                </>
+              )}
+              {parsedOrder && gameMode === 'classic' && (
                 <div className="mt-2 bg-green-900/30 rounded-lg p-2 text-xs">
                   <span className="text-green-400 font-bold">{parsedOrder.order_type}</span> - {parsedOrder.intent}
                 </div>
@@ -695,12 +969,12 @@ function GameContent() {
             </div>
           )}
 
-          {/* Battle Logs */}
+          {/* Battle Logs - show on both tabs but different amount */}
           <div className="flex-1 overflow-y-auto p-3">
-            <h3 className="font-bold text-sm mb-3 text-blue-300 border-b border-gray-700/50 pb-2">■ 戦闘ログ</h3>
+            <h3 className="font-bold text-sm mb-3 text-blue-300 border-b border-gray-700/50 pb-2">■ 戦闘ログ {activeTab === 'info' ? '(最新3件)' : '(全履歴)'}</h3>
             {turnLogs.length > 0 ? (
               <div className="space-y-3 text-xs">
-                {turnLogs.map((log, idx) => (
+                {(activeTab === 'info' ? turnLogs.slice(-3) : turnLogs).map((log, idx) => (
                   <div key={idx} className="bg-gray-700/30 rounded-lg p-2">
                     <div className="font-bold text-yellow-400 text-[10px] mb-1">T{log.turn}</div>
                     {log.orders.map((order, i) => (
