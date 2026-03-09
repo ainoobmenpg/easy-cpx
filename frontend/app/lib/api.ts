@@ -33,6 +33,10 @@ export const API = {
   // Scenario endpoints
   scenarios: `${API_BASE_URL}/api/scenarios`,
   scenario: (scenarioId: string) => `${API_BASE_URL}/api/scenarios/${scenarioId}`,
+
+  // OPORD/FRAGO endpoints (SMESC format)
+  opord: (gameId: string | number) => `${API_BASE_URL}/api/games/${toId(gameId)}/opord`,
+  opordDisplay: (gameId: string | number) => `${API_BASE_URL}/api/games/${toId(gameId)}/opord/display`,
 };
 
 export default API;

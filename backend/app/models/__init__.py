@@ -243,6 +243,9 @@ class Game(Base):
     player_score = Column(Integer, default=0)
     enemy_score = Column(Integer, default=0)
 
+    # CCIR/PIR/ROE data for Arcade mode (stored as JSON)
+    ccir_data = Column(JSON, nullable=True)
+
     units = relationship("Unit", back_populates="game", cascade="all, delete-orphan")
     turns = relationship("Turn", back_populates="game", cascade="all, delete-orphan")
     orders = relationship("Order", back_populates="game", cascade="all, delete-orphan")
@@ -477,6 +480,66 @@ class CommanderOrder(Base):
 
 
 # =============================================================================
+# CPX-4: MEL/MIL (Inject) System Models
+# =============================================================================
+
+class Inject(Base):
+    """Master Events List / Inject List entry"""
+    __tablename__ = "injects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    game_id = Column(Integer, ForeignKey("games.id"))
+
+    # Inject identification
+    name = Column(String, nullable=False)
+    description = Column(Text)
+    inject_type = Column(String, nullable=False)  # communications_outage, ew_interference, etc.
+
+    # Timing and status
+    timing = Column(String, nullable=False)  # immediate, conditional, scheduled
+    status = Column(String, default="available")  # available, triggered, expired, cancelled
+
+    # Conditions for conditional triggers
+    conditions = Column(JSON)  # List of condition dicts
+    scheduled_turn = Column(Integer, nullable=True)  # For scheduled injects
+
+    # Effects when triggered
+    effects = Column(JSON)  # List of effect dicts
+    observations = Column(JSON)  # List of observation items
+
+    # Evaluation
+    evaluation_points = Column(Integer, default=10)
+    difficulty = Column(String, default="medium")  # easy, medium, hard
+
+    # Tracking
+    triggered_turn = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    game = relationship("Game")
+
+
+class InjectLog(Base):
+    """Audit log for inject triggers and effects"""
+    __tablename__ = "inject_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    inject_id = Column(Integer, ForeignKey("injects.id"))
+    game_id = Column(Integer, ForeignKey("games.id"))
+    turn = Column(Integer, nullable=False)
+
+    # Trigger information
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    trigger_type = Column(String, nullable=False)  # immediate, condition_met, scheduled
+
+    # What was applied
+    effects_applied = Column(JSON)  # List of effect dicts applied
+    results = Column(JSON)  # Result of the inject
+
+    inject = relationship("Inject")
+    game = relationship("Game")
+
+
+# =============================================================================
 # Arcade Model Conversion Utilities
 # =============================================================================
 
@@ -589,3 +652,43 @@ def is_arcade_game(game_mode: GameMode | str) -> bool:
     if isinstance(game_mode, str):
         return game_mode == "arcade"
     return game_mode == GameMode.ARCADE
+
+
+# =============================================================================
+# RBAC Models
+# =============================================================================
+
+class UserRole(enum.Enum):
+    BLUE = "blue"      # Player forces (NATO/Western)
+    RED = "red"         # Enemy forces
+    WHITE = "white"    # Umpire/Admin/Observer with full visibility
+    OBSERVER = "observer"  # Read-only observer
+    ADMIN = "admin"     # Full system admin
+
+
+class User(Base):
+    """User account for multi-role access"""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, nullable=False, index=True)
+    password_hash = Column(String, nullable=False)
+    role = Column(Enum(UserRole), nullable=False, default=UserRole.OBSERVER)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_login = Column(DateTime, nullable=True)
+
+
+class GamePlayer(Base):
+    """Association table for users assigned to games with specific roles"""
+    __tablename__ = "game_players"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    game_id = Column(Integer, ForeignKey("games.id"), nullable=False)
+    role = Column(Enum(UserRole), nullable=False)
+    is_ready = Column(Boolean, default=False)  # Player ready signal
+    joined_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    game = relationship("Game")

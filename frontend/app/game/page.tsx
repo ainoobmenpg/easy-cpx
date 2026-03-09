@@ -139,7 +139,11 @@ function GameContent() {
   const [showLegend, setShowLegend] = useState(false);
   const [battleOdds, setBattleOdds] = useState<{ attacker: string; defender: string; odds: string; details: string } | null>(null);
   const [gameMode, setGameMode] = useState<'classic' | 'arcade'>('classic'); // Game mode: classic (text) or arcade (buttons)
-  const [activeTab, setActiveTab] = useState<'info' | 'logs' | 'history'>('info'); // Right sidebar tab
+  const [activeTab, setActiveTab] = useState<'info' | 'logs' | 'history' | 'opord'>('info'); // Right sidebar tab
+  // OPORD state for SMESC editor
+  const [opordData, setOpordData] = useState<any>(null);
+  const [opordLoading, setOpordLoading] = useState(false);
+  const [opordEditMode, setOpordEditMode] = useState(false);
   // Map pan state (for drag to pan)
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
@@ -236,6 +240,43 @@ function GameContent() {
       fetchGameState();
     } catch (e) { console.error('Failed to submit order:', e); }
     setLoading(false);
+  };
+
+  // CPX-1: Fetch OPORD data
+  const fetchOpord = async () => {
+    if (gameId === null) return;
+    setOpordLoading(true);
+    try {
+      const res = await fetch(API.opord(gameId));
+      const data = await res.json();
+      if (data.success && data.opord) {
+        setOpordData(data.opord);
+      }
+    } catch (e) {
+      console.error('Failed to fetch OPORD:', e);
+    }
+    setOpordLoading(false);
+  };
+
+  // CPX-1: Update OPORD data
+  const updateOpord = async (updates: any) => {
+    if (gameId === null) return;
+    setOpordLoading(true);
+    try {
+      const res = await fetch(API.opord(gameId), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      const data = await res.json();
+      if (data.success && data.opord) {
+        setOpordData(data.opord);
+      }
+    } catch (e) {
+      console.error('Failed to update OPORD:', e);
+    }
+    setOpordLoading(false);
+    setOpordEditMode(false);
   };
 
   // Issue #56: Add order to pending batch
@@ -887,6 +928,7 @@ function GameContent() {
             <button onClick={() => setActiveTab('info')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'info' ? 'text-blue-300 border-blue-500 bg-blue-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>情報</button>
             <button onClick={() => setActiveTab('history')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'history' ? 'text-blue-300 border-blue-500 bg-blue-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>履歴</button>
             <button onClick={() => setActiveTab('logs')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'logs' ? 'text-blue-300 border-blue-500 bg-blue-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>ログ</button>
+            <button onClick={() => { setActiveTab('opord'); fetchOpord(); }} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'opord' ? 'text-green-300 border-green-500 bg-green-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>OPORD</button>
           </div>
 
           {/* SITREP Card - shown on info tab */}
@@ -967,6 +1009,160 @@ function GameContent() {
                 </div>
               ) : (
                 <p className="text-gray-500 text-xs">ターン進行で履歴が追加されます</p>
+              )}
+            </div>
+          )}
+
+          {/* OPORD Tab - SMESC format */}
+          {activeTab === 'opord' && (
+            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-bold text-sm text-green-300 border-b border-gray-700/50 pb-2">■ OPORD/FRAGO (SMESC)</h3>
+                <button
+                  onClick={() => setOpordEditMode(!opordEditMode)}
+                  className="text-xs px-2 py-1 bg-green-700/50 hover:bg-green-600/50 rounded text-green-300"
+                >
+                  {opordEditMode ? '閉じる' : '編集'}
+                </button>
+              </div>
+
+              {opordLoading ? (
+                <p className="text-gray-500 text-xs">読み込み中...</p>
+              ) : opordData ? (
+                <div className="space-y-3 text-xs">
+                  {/* Header */}
+                  <div className="bg-gray-800/50 rounded p-2 border border-gray-700/30">
+                    <div className="font-bold text-green-300 text-sm">{opordData.title || '作戦計画'}</div>
+                    <div className="text-gray-400 text-[10px] mt-1">
+                      区分: {opordData.classification || 'unclassified'} | 発効日: {opordData.effective_date || '-'}
+                    </div>
+                  </div>
+
+                  {/* Situation */}
+                  <div className="bg-gray-800/50 rounded p-2 border border-gray-700/30">
+                    <div className="font-bold text-yellow-300 mb-1">SITUATION（状況）</div>
+                    {opordEditMode ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={opordData.situation?.enemy_situation || ''}
+                          onChange={(e) => setOpordData({...opordData, situation: {...opordData.situation, enemy_situation: e.target.value}})}
+                          className="w-full bg-gray-900/50 rounded p-1 text-gray-300 text-[10px] h-12"
+                          placeholder="敵状況"
+                        />
+                        <textarea
+                          value={opordData.situation?.friendly_situation || ''}
+                          onChange={(e) => setOpordData({...opordData, situation: {...opordData.situation, friendly_situation: e.target.value}})}
+                          className="w-full bg-gray-900/50 rounded p-1 text-gray-300 text-[10px] h-12"
+                          placeholder="味方状況"
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-1 text-gray-300">
+                        <div><span className="text-gray-500">敵:</span> {opordData.situation?.enemy_situation || '-'}</div>
+                        <div><span className="text-gray-500">味方:</span> {opordData.situation?.friendly_situation || '-'}</div>
+                        <div><span className="text-gray-500">地形:</span> {opordData.situation?.terrain_impact || '-'}</div>
+                        <div><span className="text-gray-500">天候:</span> {opordData.situation?.weather_impact || '-'}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Mission */}
+                  <div className="bg-gray-800/50 rounded p-2 border border-gray-700/30">
+                    <div className="font-bold text-yellow-300 mb-1">MISSION（任務）</div>
+                    {opordEditMode ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={opordData.mission?.task || ''}
+                          onChange={(e) => setOpordData({...opordData, mission: {...opordData.mission, task: e.target.value}})}
+                          className="w-full bg-gray-900/50 rounded p-1 text-gray-300 text-[10px] h-12"
+                          placeholder="任務"
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-1 text-gray-300">
+                        <div><span className="text-gray-500">任務:</span> {opordData.mission?.task || '-'}</div>
+                        <div><span className="text-gray-500">目的:</span> {opordData.mission?.purpose || '-'}</div>
+                        <div><span className="text-gray-500">終結:</span> {opordData.mission?.end_state || '-'}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Execution */}
+                  <div className="bg-gray-800/50 rounded p-2 border border-gray-700/30">
+                    <div className="font-bold text-yellow-300 mb-1">EXECUTION（実行）</div>
+                    {opordEditMode ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={opordData.execution?.concept_of_operations || ''}
+                          onChange={(e) => setOpordData({...opordData, execution: {...opordData.execution, concept_of_operations: e.target.value}})}
+                          className="w-full bg-gray-900/50 rounded p-1 text-gray-300 text-[10px] h-16"
+                          placeholder="作戦構想"
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-1 text-gray-300">
+                        <div><span className="text-gray-500">構想:</span> {opordData.execution?.concept_of_operations || '-'}</div>
+                        <div><span className="text-gray-500">調整:</span> {opordData.execution?.coordination || '-'}</div>
+                        <div><span className="text-gray-500">通信:</span> {opordData.execution?.command_signal || '-'}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Coordination */}
+                  <div className="bg-gray-800/50 rounded p-2 border border-gray-700/30">
+                    <div className="font-bold text-yellow-300 mb-1">COORDINATION（調整）</div>
+                    {opordEditMode ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={opordData.coordination?.fire_support || ''}
+                          onChange={(e) => setOpordData({...opordData, coordination: {...opordData.coordination, fire_support: e.target.value}})}
+                          className="w-full bg-gray-900/50 rounded p-1 text-gray-300 text-[10px] h-12"
+                          placeholder="火力支援"
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-1 text-gray-300">
+                        <div><span className="text-gray-500">火力:</span> {opordData.coordination?.fire_support || '-'}</div>
+                        <div><span className="text-gray-500">航空:</span> {opordData.coordination?.air_support || '-'}</div>
+                        <div><span className="text-gray-500">指揮:</span> {opordData.coordination?.c2_relationships || '-'}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Service Support */}
+                  <div className="bg-gray-800/50 rounded p-2 border border-gray-700/30">
+                    <div className="font-bold text-yellow-300 mb-1">SERVICE SUPPORT（後方支援）</div>
+                    {opordEditMode ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={opordData.service_support?.supply?.ammo || ''}
+                          onChange={(e) => setOpordData({...opordData, service_support: {...opordData.service_support, supply: {...opordData.service_support?.supply, ammo: e.target.value}}})}
+                          className="w-full bg-gray-900/50 rounded p-1 text-gray-300 text-[10px] h-12"
+                          placeholder="弾薬"
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-1 text-gray-300">
+                        <div><span className="text-gray-500">弾薬:</span> {opordData.service_support?.supply?.ammo || '-'}</div>
+                        <div><span className="text-gray-500">燃料:</span> {opordData.service_support?.supply?.fuel || '-'}</div>
+                        <div><span className="text-gray-500">整備:</span> {opordData.service_support?.maintenance || '-'}</div>
+                        <div><span className="text-gray-500">衛生:</span> {opordData.service_support?.medical || '-'}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Save Button */}
+                  {opordEditMode && (
+                    <button
+                      onClick={() => updateOpord(opordData)}
+                      className="w-full py-2 bg-green-600 hover:bg-green-500 rounded text-white text-xs font-bold"
+                    >
+                      保存
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-xs">OPORDがありません。「編集」ボタンで作成してください。</p>
               )}
             </div>
           )}

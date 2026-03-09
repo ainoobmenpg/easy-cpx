@@ -433,3 +433,132 @@ class TestArcadeEventIntegration:
         # With seed=999, we can check if events are possible
         # Just verify the adjudicate_turn runs without error
         assert True
+
+
+class TestCCIREvaluation:
+    """Tests for CCIR/PIR/ROE evaluation (CPX-5)"""
+
+    def test_ccir_checklist_initialization(self, db_session, arcade_game):
+        """Test that CCIR checklist is initialized correctly"""
+        engine = ArcadeAdjudication(db_session)
+
+        checklist = engine.get_ccir_checklist(arcade_game)
+
+        # Check that all categories exist
+        assert "isr" in checklist
+        assert "fires" in checklist
+        assert "sustainment" in checklist
+        assert "c2" in checklist
+
+        # Check that items exist
+        assert len(checklist["isr"]) > 0
+        assert len(checklist["fires"]) > 0
+        assert len(checklist["sustainment"]) > 0
+        assert len(checklist["c2"]) > 0
+
+    def test_ccir_compliance_full(self, db_session, arcade_game, arcade_units):
+        """Test CCIR compliance evaluation with all checks satisfied"""
+        engine = ArcadeAdjudication(db_session)
+
+        # Initialize checklist
+        engine.get_ccir_checklist(arcade_game)
+
+        # Mark all as satisfied
+        for category in ["isr", "fires", "sustainment", "c2"]:
+            for item in arcade_game.ccir_data["ccir_checklist"][category]:
+                item["satisfied"] = True
+
+        evaluation = engine.evaluate_ccir_compliance(arcade_game)
+
+        assert evaluation["overall_compliance"] == 100.0
+        assert evaluation["combat_modifier"] == 2  # Max bonus for 100%
+
+    def test_ccir_compliance_partial(self, db_session, arcade_game):
+        """Test CCIR compliance evaluation with partial checks"""
+        engine = ArcadeAdjudication(db_session)
+
+        # Initialize checklist
+        engine.get_ccir_checklist(arcade_game)
+
+        # Mark some as satisfied (50%)
+        checklist = arcade_game.ccir_data["ccir_checklist"]
+        total_items = sum(len(items) for items in checklist.values())
+        for i, category in enumerate(checklist.keys()):
+            for j, item in enumerate(checklist[category]):
+                item["satisfied"] = (i + j) % 2 == 0  # 50% satisfied
+
+        evaluation = engine.evaluate_ccir_compliance(arcade_game)
+
+        assert 0 <= evaluation["combat_modifier"] <= 2  # Should be between 0 and 2
+
+    def test_ccir_compliance_none(self, db_session, arcade_game):
+        """Test CCIR compliance evaluation with no checks satisfied"""
+        engine = ArcadeAdjudication(db_session)
+
+        # Initialize checklist
+        engine.get_ccir_checklist(arcade_game)
+
+        # Mark none as satisfied
+        for category in ["isr", "fires", "sustainment", "c2"]:
+            for item in arcade_game.ccir_data["ccir_checklist"][category]:
+                item["satisfied"] = False
+
+        evaluation = engine.evaluate_ccir_compliance(arcade_game)
+
+        assert evaluation["combat_modifier"] == -2  # Max penalty for 0%
+        assert len(evaluation["failed_checks"]) > 0
+
+    def test_ccir_modifier_applied_to_attack(self, db_session, arcade_game, arcade_units):
+        """Test that CCIR modifier is applied to attack resolution"""
+        engine = ArcadeAdjudication(db_session)
+
+        # Initialize checklist and mark all satisfied (100% = +2 modifier)
+        engine.get_ccir_checklist(arcade_game)
+        for category in ["isr", "fires", "sustainment", "c2"]:
+            for item in arcade_game.ccir_data["ccir_checklist"][category]:
+                item["satisfied"] = True
+
+        player_unit = next(u for u in arcade_units if u.side == "player" and u.unit_type == "armor")
+        enemy_unit = next(u for u in arcade_units if u.side == "enemy")
+
+        result = engine.resolve_attack(player_unit, enemy_unit, arcade_game)
+
+        assert "ccir_modifier" in result
+        assert result["ccir_modifier"] == 2  # 100% compliance = +2
+
+    def test_ccir_modifier_penalty(self, db_session, arcade_game, arcade_units):
+        """Test that CCIR penalty is applied when compliance is low"""
+        engine = ArcadeAdjudication(db_session)
+
+        # Initialize checklist and mark none satisfied (0% = -2 penalty)
+        engine.get_ccir_checklist(arcade_game)
+        for category in ["isr", "fires", "sustainment", "c2"]:
+            for item in arcade_game.ccir_data["ccir_checklist"][category]:
+                item["satisfied"] = False
+
+        player_unit = next(u for u in arcade_units if u.side == "player" and u.unit_type == "armor")
+        enemy_unit = next(u for u in arcade_units if u.side == "enemy")
+
+        result = engine.resolve_attack(player_unit, enemy_unit, arcade_game)
+
+        assert "ccir_modifier" in result
+        assert result["ccir_modifier"] == -2  # 0% compliance = -2
+
+    def test_ccir_in_adjudicate_turn(self, db_session, arcade_game, arcade_units):
+        """Test that CCIR evaluation is included in adjudicate_turn results"""
+        engine = ArcadeAdjudication(db_session)
+
+        orders = []
+        result = engine.adjudicate_turn(arcade_game.id, orders)
+
+        # Verify CCIR evaluation is included in results
+        assert "ccir" in result
+        assert "overall_compliance" in result["ccir"]
+        assert "combat_modifier" in result["ccir"]
+        assert "category_results" in result["ccir"]
+
+        # Verify category results structure
+        assert "isr" in result["ccir"]["category_results"]
+        assert "fires" in result["ccir"]["category_results"]
+        assert "sustainment" in result["ccir"]["category_results"]
+        assert "c2" in result["ccir"]["category_results"]

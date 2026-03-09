@@ -13,6 +13,7 @@ from app.services.game_state_service import get_game_state_with_fow
 from app.services.scenario_manager import ScenarioManager
 from app.services.debriefing import DebriefingGenerator
 from app.services.friction_events import FrictionEventService
+from app.services.opord_service import OpordService, get_opord_service
 import asyncio
 import os
 
@@ -1011,4 +1012,346 @@ async def event_draw(request: EventDrawRequest, db: Session = Depends(get_db)):
         "event": event,
         "game_id": request.game_id,
         "turn": game.current_turn
+    }
+
+
+# ==========================================
+# OPORD/FRAGO API Endpoints (SMESC Format)
+# ==========================================
+
+class OpordCreateRequest(BaseModel):
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "game_id": 1,
+            "title": "Operation Northern Guardian"
+        }
+    })
+
+    game_id: int = Field(..., gt=0)
+    title: str = Field(default="作戦計画")
+
+
+class OpordUpdateRequest(BaseModel):
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "title": "Updated Operation Plan",
+            "situation": {
+                "enemy_situation": "Enemy forces have regrouped in the northern sector"
+            }
+        }
+    })
+
+    title: Optional[str] = None
+    classification: Optional[Literal["unclassified", "confidential", "secret", "top_secret"]] = None
+    effective_date: Optional[str] = None
+    situation: Optional[dict] = None
+    mission: Optional[dict] = None
+    execution: Optional[dict] = None
+    coordination: Optional[dict] = None
+    service_support: Optional[dict] = None
+
+
+@router.get("/games/{game_id}/opord")
+def get_opord(game_id: int):
+    """
+    Get the current OPORD for a game.
+    Returns the SMESC format OPORD/FRAGO.
+    """
+    opord_service = get_opord_service()
+    opord = opord_service.get_current_opord()
+
+    if opord is None:
+        # Create default OPORD if none exists
+        opord_service.create_default_opord(game_id)
+
+    return {
+        "success": True,
+        "opord": opord_service.to_dict()
+    }
+
+
+@router.post("/games/{game_id}/opord")
+def create_opord(game_id: int, request: OpordCreateRequest):
+    """
+    Create a new OPORD for a game.
+    """
+    opord_service = get_opord_service()
+    opord = opord_service.create_default_opord(game_id, request.title)
+
+    return {
+        "success": True,
+        "opord": opord_service.to_dict()
+    }
+
+
+@router.put("/games/{game_id}/opord")
+def update_opord(game_id: int, request: OpordUpdateRequest):
+    """
+    Update an existing OPORD.
+    """
+    opord_service = get_opord_service()
+    current_opord = opord_service.get_current_opord()
+
+    if current_opord is None:
+        opord_service.create_default_opord(game_id)
+
+    # Update title
+    if request.title is not None:
+        opord_service._current_opord.title = request.title
+
+    # Update classification
+    if request.classification is not None:
+        opord_service._current_opord.classification = request.classification
+
+    # Update effective date
+    if request.effective_date is not None:
+        opord_service._current_opord.effective_date = request.effective_date
+
+    # Update situation section
+    if request.situation is not None:
+        opord_service.update_situation(**request.situation)
+
+    # Update mission section
+    if request.mission is not None:
+        opord_service.update_mission(**request.mission)
+
+    # Update execution section
+    if request.execution is not None:
+        opord_service.update_execution(**request.execution)
+
+    # Update coordination section
+    if request.coordination is not None:
+        opord_service.update_coordination(**request.coordination)
+
+    # Update service support section
+    if request.service_support is not None:
+        opord_service.update_service_support(**request.service_support)
+
+    return {
+        "success": True,
+        "opord": opord_service.to_dict()
+    }
+
+
+@router.get("/games/{game_id}/opord/display")
+def get_opord_display(game_id: int):
+    """
+    Get OPORD formatted for display in UI.
+    """
+    opord_service = get_opord_service()
+    opord = opord_service.get_current_opord()
+
+    if opord is None:
+        opord_service.create_default_opord(game_id)
+
+    return {
+        "success": True,
+        "formatted": opord_service.format_for_display()
+    }
+
+
+# ==========================================
+# CPX-4: MEL/MIL (Inject) System API Endpoints
+# ==========================================
+
+# In-memory inject system storage (per game)
+# In production, this would be stored in the database
+_inject_systems: dict[int, Any] = {}
+
+
+class InjectTriggerRequest(BaseModel):
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "inject_id": "inj_comms_01",
+            "turn": 3,
+            "trigger_type": "immediate"
+        }
+    })
+
+    inject_id: str
+    turn: int
+    trigger_type: str = "immediate"
+
+
+class InjectCancelRequest(BaseModel):
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "inject_id": "inj_comms_01"
+        }
+    })
+
+    inject_id: str
+
+
+@router.get("/injects/{game_id}")
+def get_injects(game_id: int, db: Session = Depends(get_db)):
+    """
+    Get all injects for a game.
+    Returns available injects, active effects, and history.
+    """
+    from app.services.inject_system import create_inject_system
+
+    # Get or create inject system for this game
+    if game_id not in _inject_systems:
+        _inject_systems[game_id] = create_inject_system(game_id)
+
+    inject_system = _inject_systems[game_id]
+
+    return {
+        "game_id": game_id,
+        "injects": inject_system.get_available_injects(),
+        "triggered_injects": [
+            inj for inj in inject_system._available_injects.values()
+            if inj.get("status") == "triggered"
+        ],
+        "active_effects": inject_system.get_active_effects(),
+        "history": inject_system.get_inject_history(),
+        "summary": inject_system.get_inject_summary()
+    }
+
+
+@router.post("/injects/{game_id}/trigger")
+def trigger_inject(
+    game_id: int,
+    request: InjectTriggerRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Trigger an inject immediately.
+    Returns the inject log entry.
+    """
+    from app.services.inject_system import create_inject_system
+
+    # Get or create inject system for this game
+    if game_id not in _inject_systems:
+        _inject_systems[game_id] = create_inject_system(game_id)
+
+    inject_system = _inject_systems[game_id]
+
+    # Get game state for context
+    game = db.query(Game).filter(Game.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    # Build simple game state for inject evaluation
+    engine = RuleEngine(db)
+    game_state = engine.get_game_state(game_id)
+
+    # Trigger the inject
+    result = inject_system.trigger_immediate_inject(
+        request.inject_id,
+        request.turn,
+        game_state
+    )
+
+    if result is None:
+        raise HTTPException(status_code=400, detail="Inject not found or not available")
+
+    return {
+        "success": True,
+        "inject": result
+    }
+
+
+@router.post("/injects/{game_id}/cancel")
+def cancel_inject(
+    game_id: int,
+    request: InjectCancelRequest
+):
+    """
+    Cancel an available inject.
+    """
+    from app.services.inject_system import create_inject_system
+
+    # Get or create inject system for this game
+    if game_id not in _inject_systems:
+        _inject_systems[game_id] = create_inject_system(game_id)
+
+    inject_system = _inject_systems[game_id]
+
+    success = inject_system.cancel_inject(request.inject_id)
+
+    if not success:
+        raise HTTPException(status_code=400, detail="Inject not found or not cancellable")
+
+    return {
+        "success": True,
+        "message": f"Inject {request.inject_id} cancelled"
+    }
+
+
+@router.post("/injects/{game_id}/reset")
+def reset_inject(
+    game_id: int,
+    request: InjectCancelRequest
+):
+    """
+    Reset a triggered inject to available status.
+    """
+    from app.services.inject_system import create_inject_system
+
+    # Get or create inject system for this game
+    if game_id not in _inject_systems:
+        _inject_systems[game_id] = create_inject_system(game_id)
+
+    inject_system = _inject_systems[game_id]
+
+    success = inject_system.reset_inject(request.inject_id)
+
+    if not success:
+        raise HTTPException(status_code=400, detail="Inject not found or not resettable")
+
+    return {
+        "success": True,
+        "message": f"Inject {request.inject_id} reset to available"
+    }
+
+
+@router.get("/injects/{game_id}/effects")
+def get_active_effects(game_id: int):
+    """
+    Get currently active effects for a game.
+    Returns modifiers to be applied in adjudication.
+    """
+    from app.services.inject_system import create_inject_system
+
+    # Get or create inject system for this game
+    if game_id not in _inject_systems:
+        _inject_systems[game_id] = create_inject_system(game_id)
+
+    inject_system = _inject_systems[game_id]
+
+    return {
+        "game_id": game_id,
+        "active_effects": inject_system.get_active_effects(),
+        "modifiers": {
+            "movement": inject_system.get_effect_modifier("movement"),
+            "combat": inject_system.get_effect_modifier("combat"),
+            "reconnaissance": inject_system.get_effect_modifier("reconnaissance"),
+            "supply": inject_system.get_effect_modifier("supply"),
+            "morale": inject_system.get_effect_modifier("morale")
+        }
+    }
+
+
+@router.post("/injects/{game_id}/decrement-turn")
+def decrement_effects_turn(game_id: int):
+    """
+    Decrement effect durations at end of turn.
+    Called by turn commit/adjudication.
+    """
+    from app.services.inject_system import create_inject_system
+
+    if game_id not in _inject_systems:
+        return {
+            "success": True,
+            "message": "No active effects"
+        }
+
+    inject_system = _inject_systems[game_id]
+    expired = inject_system.decrement_effect_duration(0)  # Turn is handled externally
+
+    return {
+        "success": True,
+        "expired_effects": expired
     }

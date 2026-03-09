@@ -4,6 +4,8 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from app.models import Game, GameMode, ArcadeUnit, OrderType
 from app.services.event_deck import EventDeckService
+from app.services.rng_service import RNGService
+from app.services.structured_logging import get_structured_logger
 
 
 # VP (Victory Point) values for destroying enemy units
@@ -37,22 +39,46 @@ TERRAIN_MOVE_COSTS = {
 }
 
 
+# CCIR (Commander's Critical Information Requirements) default checklist
+DEFAULT_CCIS_CHECKLIST = {
+    "isr": [
+        {"id": "isr_1", "description": "Enemy disposition confirmed", "required": True},
+        {"id": "isr_2", "description": "Terrain recon completed", "required": False},
+    ],
+    "fires": [
+        {"id": "fires_1", "description": "Fire support available", "required": True},
+        {"id": "fires_2", "description": "SEAD coverage confirmed", "required": False},
+    ],
+    "sustainment": [
+        {"id": "sus_1", "description": "Ammo status adequate", "required": True},
+        {"id": "sus_2", "description": "Fuel status adequate", "required": True},
+    ],
+    "c2": [
+        {"id": "c2_1", "description": "Communications operational", "required": True},
+        {"id": "c2_2", "description": "Command authority confirmed", "required": True},
+    ],
+}
+
+
 class ArcadeAdjudication:
     """Simplified 2D6 rule engine for Arcade mode"""
 
     # Event deck draw chance per turn (20%)
     EVENT_DRAW_CHANCE = 0.2
 
-    def __init__(self, db_session: Session, seed: Optional[int] = None):
+    def __init__(self, db_session: Session, seed: Optional[int] = None, game_id: Optional[int] = None):
         self.db = db_session
-        if seed is not None:
-            random.seed(seed)
+        # Initialize RNG service for reproducibility
+        self.rng = RNGService(game_id=game_id, initial_seed=seed)
         # Initialize event deck service
         self.event_deck = EventDeckService(random_seed=seed)
+        # Structured logger
+        self.logger = get_structured_logger()
 
-    def roll_2d6(self) -> int:
+    def roll_2d6(self, context: Optional[str] = None) -> int:
         """Roll 2 six-sided dice"""
-        return random.randint(1, 6) + random.randint(1, 6)
+        die1, die2, total = self.rng.roll_2d6(context=context)
+        return total
 
     def get_modifiers(self, unit: ArcadeUnit, game: Game) -> int:
         """Calculate all modifiers for a unit"""
@@ -69,6 +95,130 @@ class ArcadeAdjudication:
             mod -= 1
 
         return mod
+
+    def get_ccir_checklist(self, game: Game) -> dict:
+        """Get or initialize CCIR checklist for a game.
+
+        Returns:
+            dict with keys: isr, fires, sustainment, c2 (each a list of CCIR items)
+        """
+        # Try to get from game ccir_data, or initialize default
+        if game.ccir_data and 'ccir_checklist' in game.ccir_data:
+            return game.ccir_data['ccir_checklist']
+
+        # Initialize with defaults
+        checklist = {}
+        for category, items in DEFAULT_CCIS_CHECKLIST.items():
+            checklist[category] = [
+                {
+                    "id": item["id"],
+                    "description": item["description"],
+                    "required": item["required"],
+                    "satisfied": False,
+                }
+                for item in items
+            ]
+
+        # Save to game.ccir_data
+        if not game.ccir_data:
+            game.ccir_data = {}
+        game.ccir_data['ccir_checklist'] = checklist
+        self.db.commit()
+
+        return checklist
+
+    def update_ccir_status(self, game: Game, unit: ArcadeUnit) -> None:
+        """Update CCIR checklist based on unit actions this turn."""
+        checklist = self.get_ccir_checklist(game)
+
+        # ISR checks - satisfied if player has units (basic ISR capability)
+        for item in checklist["isr"]:
+            if not item["satisfied"]:
+                item["satisfied"] = True
+
+        # Fires checks - satisfied if unit can attack (has ammo)
+        for item in checklist["fires"]:
+            if item["id"] == "fires_1" and not item["satisfied"]:
+                item["satisfied"] = unit.can_attack
+
+        # Sustainment checks - satisfied if unit has supplies
+        for item in checklist["sustainment"]:
+            if item["id"] == "sus_1" and not item["satisfied"]:
+                item["satisfied"] = unit.can_attack
+            elif item["id"] == "sus_2" and not item["satisfied"]:
+                item["satisfied"] = unit.can_move
+
+        # C2 checks - always satisfied in Arcade mode
+        for item in checklist["c2"]:
+            if not item["satisfied"]:
+                item["satisfied"] = True
+
+        # Save back to game ccir_data
+        if not game.ccir_data:
+            game.ccir_data = {}
+        game.ccir_data['ccir_checklist'] = checklist
+        self.db.commit()
+        self.db.commit()
+
+    def evaluate_ccir_compliance(self, game: Game) -> dict:
+        """Evaluate CCIR compliance and return combat modifier.
+
+        Rules:
+        - 100% compliance: +2 attack modifier (well-prepared)
+        - 75-99% compliance: +1 attack modifier
+        - 50-74% compliance: 0 modifier (neutral)
+        - 25-49% compliance: -1 attack modifier
+        - 0-24% compliance: -2 attack modifier (poor preparation)
+
+        Returns:
+            dict with compliance percentage, category results, and combat modifier
+        """
+        checklist = self.get_ccir_checklist(game)
+
+        category_results = {}
+        total_passed = 0
+        total_required = 0
+
+        for category, items in checklist.items():
+            passed = sum(1 for item in items if item["satisfied"])
+            required = sum(1 for item in items if item.get("required", False))
+            total_passed += passed
+            total_required += max(required, 1)  # Avoid division by zero
+
+            category_results[category] = {
+                "passed": passed,
+                "total": len(items)
+            }
+
+        # Calculate overall compliance percentage
+        total_items = sum(len(items) for items in checklist.values())
+        compliance = (total_passed / total_items * 100) if total_items > 0 else 0
+
+        # Determine combat modifier based on compliance
+        if compliance >= 100:
+            combat_modifier = 2
+        elif compliance >= 75:
+            combat_modifier = 1
+        elif compliance >= 50:
+            combat_modifier = 0
+        elif compliance >= 25:
+            combat_modifier = -1
+        else:
+            combat_modifier = -2
+
+        # Collect failed required checks
+        failed_checks = []
+        for category, items in checklist.items():
+            for item in items:
+                if item.get("required", False) and not item["satisfied"]:
+                    failed_checks.append(f"{category}: {item['description']}")
+
+        return {
+            "overall_compliance": round(compliance, 1),
+            "category_results": category_results,
+            "combat_modifier": combat_modifier,
+            "failed_checks": failed_checks
+        }
 
     def resolve_attack(
         self, attacker: ArcadeUnit, defender: ArcadeUnit, game: Game
@@ -87,8 +237,17 @@ class ArcadeAdjudication:
             strike_bonus = 2
             attack_mod += strike_bonus
 
-        attack_roll = self.roll_2d6() + attacker_stats["attack"] + attack_mod
-        defense_roll = self.roll_2d6() + defender_stats["defense"] + defense_mod
+        # Apply CCIR compliance modifier
+        ccir_evaluation = self.evaluate_ccir_compliance(game)
+        ccir_modifier = ccir_evaluation.get("combat_modifier", 0)
+        attack_mod += ccir_modifier
+
+        # Roll dice with context for logging
+        attack_die1, attack_die2, _ = self.rng.roll_2d6(context=f"attack_{attacker.id}")
+        defense_die1, defense_die2, _ = self.rng.roll_2d6(context=f"defense_{defender.id}")
+
+        attack_roll = attack_die1 + attack_die2 + attacker_stats["attack"] + attack_mod
+        defense_roll = defense_die1 + defense_die2 + defender_stats["defense"] + defense_mod
 
         # Determine result
         diff = attack_roll - defense_roll
@@ -122,6 +281,32 @@ class ArcadeAdjudication:
             damage_to_attacker = 0
             damage_to_defender = 4
 
+        # Log structured combat data
+        self.logger.log_combat(
+            attacker_id=attacker.id,
+            defender_id=defender.id,
+            terrain="plain",  # Simplified - could get from game map
+            attack_roll=attack_roll,
+            defense_roll=defense_roll,
+            net_modifier=diff,
+            outcome=result,
+            damage={
+                "to_attacker": damage_to_attacker,
+                "to_defender": damage_to_defender,
+            },
+            modifiers={
+                "attack_mod": attack_mod,
+                "defense_mod": defense_mod,
+                "strike_bonus": strike_bonus,
+                "ccir_modifier": ccir_modifier,
+            },
+            roll_details={
+                "attack_dice": [attack_die1, attack_die2],
+                "defense_dice": [defense_die1, defense_die2],
+            },
+            seed=self.rng.current_seed,
+        )
+
         return {
             "result": result,
             "attack_roll": attack_roll,
@@ -129,6 +314,8 @@ class ArcadeAdjudication:
             "damage_to_attacker": damage_to_attacker,
             "damage_to_defender": damage_to_defender,
             "strike_bonus": strike_bonus,
+            "ccir_modifier": ccir_modifier,
+            "ccir_compliance": ccir_evaluation.get("overall_compliance", 0),
         }
 
     def resolve_move(
@@ -487,6 +674,18 @@ class ArcadeAdjudication:
 
         units = self.db.query(ArcadeUnit).filter(ArcadeUnit.game_id == game_id).all()
 
+        # Initialize CCIR checklist for new games
+        self.get_ccir_checklist(game)
+        self.db.commit()
+
+        # Update CCIR status for player units
+        player_units = [u for u in units if u.side == "player" and u.strength > 0]
+        for unit in player_units:
+            self.update_ccir_status(game, unit)
+
+        # Evaluate CCIR compliance at start of turn
+        ccir_evaluation = self.evaluate_ccir_compliance(game)
+
         results = {
             "turn": game.current_turn,
             "moves": [],
@@ -497,6 +696,7 @@ class ArcadeAdjudication:
             "strikes": [],
             "waits": [],
             "destructions": [],
+            "ccir": ccir_evaluation,
         }
 
         # Process orders

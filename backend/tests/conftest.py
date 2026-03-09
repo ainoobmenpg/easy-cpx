@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from app.models import Base, Game, Unit, Turn, Order, UnitStatus, OrderType, SupplyLevel
+from app.models import Base, Game, Unit, Turn, Order, UnitStatus, OrderType, SupplyLevel, User, UserRole
 
 
 @pytest.fixture

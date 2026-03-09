@@ -14,6 +14,152 @@ class AARSection:
     TACTICAL_ANALYSIS = "tactical_analysis"
     STRATEGIC_INSIGHTS = "strategic_insights"
     LESSONS_LEARNED = "lessons_learned"
+    MOP_MOE = "mop_moe"  # New section for Measures of Performance/Effectiveness
+
+
+class MOPIndicator:
+    """Measures of Performance - quantitative metrics"""
+
+    @staticmethod
+    def calculate_player_efficiency(stats: Dict[str, Any]) -> Dict[str, Any]:
+        """Calculate player operational efficiency"""
+        player = stats["player"]
+        enemy = stats["enemy"]
+
+        # Kill ratio (MOP: how efficiently we destroyed enemy)
+        killed = enemy["destroyed"]
+        lost = player["destroyed"]
+        kill_ratio = killed / max(lost, 1)
+
+        # Damage efficiency (MOP: damage dealt vs damage taken)
+        total_damage_dealt = (enemy["destroyed"] * 3 + enemy["damaged"] * 2 + enemy["light_damage"] * 1)
+        total_damage_taken = (player["destroyed"] * 3 + player["damaged"] * 2 + player["light_damage"] * 1)
+        damage_ratio = total_damage_dealt / max(total_damage_taken, 1)
+
+        # Turn efficiency
+        total_turns = stats["operations"]["total_turns"]
+        destruction_per_turn = killed / max(total_turns, 1)
+
+        return {
+            "kill_ratio": round(kill_ratio, 2),
+            "damage_ratio": round(damage_ratio, 2),
+            "destruction_per_turn": round(destruction_per_turn, 2),
+            "rating": "excellent" if kill_ratio >= 3 else "good" if kill_ratio >= 2 else "adequate" if kill_ratio >= 1 else "poor"
+        }
+
+    @staticmethod
+    def calculate_resource_efficiency(stats: Dict[str, Any]) -> Dict[str, Any]:
+        """Calculate resource management efficiency"""
+        resources = stats["resources"]
+
+        total_units = stats["player"]["initial_count"]
+        if total_units == 0:
+            return {"rating": "N/A", "score": 0}
+
+        # Depletion rate
+        ammo_depletion = (resources["ammo_depleted_units"] + resources["ammo_low_units"]) / total_units
+        fuel_depletion = (resources["fuel_depleted_units"] + resources["fuel_low_units"]) / total_units
+
+        # Score (lower depletion = higher score)
+        score = max(0, 10 - (ammo_depletion * 5 + fuel_depletion * 5))
+
+        rating = "excellent" if score >= 8 else "good" if score >= 6 else "adequate" if score >= 4 else "poor"
+
+        return {
+            "ammo_depletion_rate": round(ammo_depletion * 100, 1),
+            "fuel_depletion_rate": round(fuel_depletion * 100, 1),
+            "score": score,
+            "rating": rating
+        }
+
+
+class MOEIndicator:
+    """Measures of Effectiveness - mission outcome metrics"""
+
+    @staticmethod
+    def calculate_mission_effectiveness(stats: Dict[str, Any], mission_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Calculate mission effectiveness"""
+        player = stats["player"]
+        enemy = stats["enemy"]
+
+        # MOE 1: Enemy neutralization rate
+        neutralization = enemy["destruction_rate"]
+
+        # MOE 2: Force preservation rate
+        preservation = 100 - player["casualty_rate"]
+
+        # MOE 3: Objective completion (from mission_result)
+        if mission_result["status"] == "success":
+            objective_completion = 100
+        elif mission_result["status"] == "partial":
+            objective_completion = 50
+        else:
+            objective_completion = 0
+
+        # Combined effectiveness score
+        effectiveness = (neutralization * 0.4 + preservation * 0.3 + objective_completion * 0.3)
+
+        return {
+            "enemy_neutralization": round(neutralization, 1),
+            "force_preservation": round(preservation, 1),
+            "objective_completion": objective_completion,
+            "overall_effectiveness": round(effectiveness, 1),
+            "rating": "excellent" if effectiveness >= 80 else "good" if effectiveness >= 60 else "adequate" if effectiveness >= 40 else "poor"
+        }
+
+    @staticmethod
+    def calculate_tactical_effectiveness(stats: Dict[str, Any]) -> Dict[str, Any]:
+        """Calculate tactical effectiveness metrics"""
+        player = stats["player"]
+
+        # Defensive effectiveness
+        casualty_rate = player["casualty_rate"]
+        if casualty_rate <= 10:
+            defensive_rating = "excellent"
+        elif casualty_rate <= 25:
+            defensive_rating = "good"
+        elif casualty_rate <= 50:
+            defensive_rating = "adequate"
+        else:
+            defensive_rating = "poor"
+
+        # Offensive effectiveness
+        enemy = stats["enemy"]
+        destruction_rate = enemy["destruction_rate"]
+        if destruction_rate >= 50:
+            offensive_rating = "excellent"
+        elif destruction_rate >= 30:
+            offensive_rating = "good"
+        elif destruction_rate >= 15:
+            offensive_rating = "adequate"
+        else:
+            offensive_rating = "poor"
+
+        return {
+            "defensive_effectiveness": {
+                "rating": defensive_rating,
+                "casualty_rate": round(casualty_rate, 1),
+            },
+            "offensive_effectiveness": {
+                "rating": offensive_rating,
+                "destruction_rate": round(destruction_rate, 1),
+            },
+            "combined_rating": "excellent" if defensive_rating == "excellent" and offensive_rating == "excellent" else \
+                              "good" if defensive_rating in ["excellent", "good"] and offensive_rating in ["excellent", "good"] else \
+                              "adequate"
+        }
+
+
+# Backward compatibility - keep original AARSection
+class AARSectionOld:
+    """AAR report section identifiers"""
+    EXECUTIVE_SUMMARY = "executive_summary"
+    TURN_SUMMARIES = "turn_summaries"
+    COMBAT_ANALYSIS = "combat_analysis"
+    RESOURCE_ANALYSIS = "resource_analysis"
+    TACTICAL_ANALYSIS = "tactical_analysis"
+    STRATEGIC_INSIGHTS = "strategic_insights"
+    LESSONS_LEARNED = "lessons_learned"
 
 
 class DebriefingGenerator:
@@ -52,6 +198,19 @@ class DebriefingGenerator:
         tactical_analysis = self._generate_tactical_analysis(stats, game)
         lessons_learned = self._generate_lessons_learned(stats, mission_result)
 
+        # Calculate MOP/MOE indicators (Measures of Performance/Effectiveness)
+        mop_indicators = {
+            "operational_efficiency": MOPIndicator.calculate_player_efficiency(stats),
+            "resource_efficiency": MOPIndicator.calculate_resource_efficiency(stats),
+        }
+        moe_indicators = {
+            "mission_effectiveness": MOEIndicator.calculate_mission_effectiveness(stats, mission_result),
+            "tactical_effectiveness": MOEIndicator.calculate_tactical_effectiveness(stats),
+        }
+
+        # Generate improvement suggestions
+        improvement_suggestions = self._generate_improvement_suggestions(stats, mission_result, mop_indicators, moe_indicators)
+
         # Build structured AAR response
         return {
             "aar_format": "1.0",
@@ -77,6 +236,11 @@ class DebriefingGenerator:
             "resource_analysis": self._generate_resource_analysis(stats),
             "tactical_analysis": tactical_analysis,
             "lessons_learned": lessons_learned,
+            "mop_moe": {
+                "performance": mop_indicators,
+                "effectiveness": moe_indicators,
+            },
+            "improvement_suggestions": improvement_suggestions,
             "recommendations": self._generate_recommendations(stats, mission_result),
             # Legacy compatibility - keep top-level keys for backward compatibility
             "mission_result": mission_result,
@@ -551,6 +715,83 @@ class DebriefingGenerator:
             return "Operation completed with mixed results. Some objectives were achieved while others remain outstanding. Further analysis required."
         else:
             return "Operation did not achieve intended objectives. Command will review the planning and execution. Lessons will be incorporated into future operations."
+
+    def _generate_improvement_suggestions(
+        self,
+        stats: Dict[str, Any],
+        mission_result: Dict[str, Any],
+        mop_indicators: Dict[str, Any],
+        moe_indicators: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Generate specific improvement suggestions based on MOP/MOE analysis"""
+        suggestions = []
+
+        # Analyze operational efficiency (MOP)
+        op_eff = mop_indicators.get("operational_efficiency", {})
+        if op_eff.get("rating") == "poor":
+            suggestions.append({
+                "area": "operational_efficiency",
+                "priority": "high",
+                "issue": "Kill ratio indicates inefficient combat operations",
+                "suggestion": "Concentrate fire on isolated enemy units. Avoid prolonged engagements.",
+                "metric": f"Kill ratio: {op_eff.get('kill_ratio', 0)}"
+            })
+
+        # Analyze resource efficiency (MOP)
+        res_eff = mop_indicators.get("resource_efficiency", {})
+        if res_eff.get("rating") in ["poor", "adequate"]:
+            suggestions.append({
+                "area": "resource_management",
+                "priority": "medium" if res_eff.get("rating") == "adequate" else "high",
+                "issue": f"Resource depletion: Ammo {res_eff.get('ammo_depletion_rate', 0)}%, Fuel {res_eff.get('fuel_depletion_rate', 0)}%",
+                "suggestion": "Establish forward supply points. Prioritize ammunition conservation.",
+                "metric": f"Resource score: {res_eff.get('score', 0)}/10"
+            })
+
+        # Analyze mission effectiveness (MOE)
+        mission_eff = moe_indicators.get("mission_effectiveness", {})
+        if mission_eff.get("rating") == "poor":
+            suggestions.append({
+                "area": "mission_effectiveness",
+                "priority": "critical",
+                "issue": "Mission objectives not achieved",
+                "suggestion": "Review commander's intent. Reassess tactical approach.",
+                "metric": f"Effectiveness: {mission_eff.get('overall_effectiveness', 0)}%"
+            })
+
+        # Analyze tactical effectiveness (MOE)
+        tact_eff = moe_indicators.get("tactical_effectiveness", {})
+        defensive = tact_eff.get("defensive_effectiveness", {})
+        if defensive.get("rating") == "poor":
+            suggestions.append({
+                "area": "force_protection",
+                "priority": "high",
+                "issue": f"High casualty rate: {defensive.get('casualty_rate', 0)}%",
+                "suggestion": "Use terrain for cover. Increase recon before engagement.",
+                "metric": f"Defensive rating: {defensive.get('rating')}"
+            })
+
+        offensive = tact_eff.get("offensive_effectiveness", {})
+        if offensive.get("rating") == "poor":
+            suggestions.append({
+                "area": "offensive_operations",
+                "priority": "high",
+                "issue": f"Low enemy destruction: {offensive.get('destruction_rate', 0)}%",
+                "suggestion": "Focus fire on vulnerable targets. Maintain initiative.",
+                "metric": f"Offensive rating: {offensive.get('rating')}"
+            })
+
+        # Add positive feedback for excellent performance
+        if mission_eff.get("rating") == "excellent":
+            suggestions.append({
+                "area": "overall_performance",
+                "priority": "info",
+                "issue": "Excellent mission execution",
+                "suggestion": "Maintain current operational tempo and tactics.",
+                "metric": f"Overall effectiveness: {mission_eff.get('overall_effectiveness', 0)}%"
+            })
+
+        return suggestions
 
     def _generate_recommendations(
         self,
