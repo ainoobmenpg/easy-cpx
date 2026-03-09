@@ -108,7 +108,7 @@ export default function ScenariosPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-blue-400 text-xl">Loading scenarios...</div>
+        <div className="text-blue-400 text-xl">シナリオを読み込み中...</div>
       </div>
     );
   }
@@ -120,12 +120,20 @@ export default function ScenariosPage() {
           <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
             作戦級CPX - シナリオ選択
           </h1>
-          <button
-            onClick={() => router.push('/')}
-            className="text-sm bg-gray-700/50 hover:bg-gray-600/50 px-4 py-2 rounded transition-colors"
-          >
-            Back
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => router.push('/games')}
+              className="text-sm bg-gray-700/50 hover:bg-gray-600/50 px-4 py-2 rounded transition-colors"
+            >
+              ゲーム一覧
+            </button>
+            <button
+              onClick={() => router.push('/')}
+              className="text-sm bg-gray-700/50 hover:bg-gray-600/50 px-4 py-2 rounded transition-colors"
+            >
+              Back
+            </button>
+          </div>
         </div>
       </header>
 
@@ -188,13 +196,13 @@ export default function ScenariosPage() {
                   disabled={startingGame}
                   className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg transition-colors"
                 >
-                  {startingGame ? 'Starting...' : 'Start Mission'}
+                  {startingGame ? '開始中...' : 'ミッション開始'}
                 </button>
                 <button
                   onClick={() => setSelectedScenario(null)}
                   className="px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
                 >
-                  Cancel
+                  キャンセル
                 </button>
               </div>
             </div>

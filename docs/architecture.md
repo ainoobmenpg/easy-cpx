@@ -90,11 +90,11 @@ Operational CPX is a full-stack web application with a Python backend and Next.j
 | `/api/parse-order` | POST | Parse player order (AI) |
 | `/api/orders/` | POST | Submit order |
 | `/api/advance-turn` | POST | Process turn |
-| `/api/game/{game_id}/state` | GET | Get game state (Fog of War applied) |
-| `/api/game/{game_id}/sitrep` | GET | Get SITREP |
-| `/api/game/{game_id}/debriefing` | Get game debriefing |
-| `/api/game/start` | POST | Start new game with scenario |
-| `/api/game/end` | POST | End game |
+| `/api/games/{game_id}/state` | GET | Get game state (Fog of War applied) |
+| `/api/games/{game_id}/sitrep` | GET | Get SITREP |
+| `/api/games/{game_id}/debriefing` | GET | Get game debriefing |
+| `/api/games/start` | POST | Start new game with scenario |
+| `/api/games/{game_id}/end` | POST | End game |
 | `/api/units/{unit_id}/move` | POST | Move unit |
 | `/api/scenarios` | GET | List scenarios |
 | `/api/scenarios/{scenario_id}` | GET | Get scenario details |

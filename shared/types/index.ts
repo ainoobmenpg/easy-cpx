@@ -97,22 +97,112 @@ export interface Sitrep {
 export type UnitStatus = 'intact' | 'light_damage' | 'medium_damage' | 'heavy_damage' | 'destroyed';
 export type SupplyLevel = 'full' | 'depleted' | 'exhausted';
 
+// Extended Unit interface for frontend (with FoW fields)
 export interface Unit {
-  id: string;
+  id: number;
   name: string;
   type: string;
+  side: 'player' | 'enemy';
   x: number;
   y: number;
   status: UnitStatus;
   ammo: SupplyLevel;
   fuel: SupplyLevel;
   readiness: SupplyLevel;
+  strength: number;
+  infantry_subtype?: string;
+  recon_value?: number;
+  visibility_range?: number;
+  // Fog of War fields
+  observation_confidence?: ConfidenceLevel;
+  last_observed_turn?: number;
+  confidence_score?: number;
+  estimated_x?: number;
+  estimated_y?: number;
+  position_accuracy?: number;
+  last_known_type?: string;
+  observation_sources?: Array<{ observer_id: number; confidence: number }>;
+}
+
+// Game State interface for frontend
+export interface TerrainInfo {
+  symbol: string;
+  color: string;
+  name: string;
+}
+
+export interface WeatherEffects {
+  reconnaissance_modifier: number;
+  movement_modifier: number;
+  [key: string]: unknown;
 }
 
 export interface GameState {
+  game_id: number;
   turn: number;
   time: string;
+  date: string;
   weather: string;
+  phase: string;
+  is_night: boolean;
+  terrain: Record<string, string>;
+  terrain_info: Record<string, TerrainInfo>;
+  weather_effects: WeatherEffects;
   units: Unit[];
-  player_knowledge: Record<string, unknown>;
+  player_knowledge?: Record<string, unknown>;
+}
+
+// Turn Log types for frontend
+export interface TurnLogOrder {
+  unit: string;
+  outcome: string;
+}
+
+export interface TurnLog {
+  turn: number;
+  orders: TurnLogOrder[];
+}
+
+// API Response types
+export interface GameListItem {
+  id: number;
+  name: string;
+  current_turn: number;
+  current_date: string;
+  current_time: string;
+  weather: string;
+  phase: string;
+  is_active: boolean;
+}
+
+export interface GameDetail extends GameListItem {
+  terrain_data?: Record<string, string>;
+  map_width: number;
+  map_height: number;
+}
+
+// Order submission types
+export interface OrderSubmit {
+  unit_id: number;
+  order_type: OrderType;
+  target_units?: number[];
+  intent: string;
+  location_x?: number;
+  location_y?: number;
+  location_name?: string;
+  priority?: 'high' | 'normal' | 'low';
+}
+
+// Turn advance types
+export interface TurnAdvanceRequest {
+  game_id: number;
+}
+
+export interface TurnAdvanceResponse {
+  turn: number;
+  results: OrderResult[];
+  events: AdjudicationEvent[];
+  enemy_results: unknown[];
+  sitrep: Sitrep;
+  next_time: string;
 }

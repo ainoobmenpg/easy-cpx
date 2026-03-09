@@ -45,7 +45,7 @@ class ExConAI:
     of player actions, creating a dynamic and challenging opponent.
     """
 
-    def __init__(self, seed: Optional[int] = None):
+    def __init__(self, seed: Optional[int] = None, scenario_config: Optional[dict] = None):
         self._random = random.Random(seed)
         self._current_intent: EnemyIntent = EnemyIntent.DEFEND_TERRITORY
         self._intent_duration = 0  # Turns remaining for current intent
@@ -53,6 +53,16 @@ class ExConAI:
         self._tactical_situation = "normal"  # normal, pressure, critical
         self._aggression_level = 0.5  # 0.0 to 1.0
         self._known_player_positions: dict[int, tuple[int, int]] = {}
+        self._map_width: float = 50.0
+        self._map_height: float = 30.0
+
+        # Scenario-driven configuration (can be passed from scenario settings)
+        self._scenario_config = scenario_config or {}
+        # Enemy retreat direction: dx/dy normalized vector (scenario-driven)
+        # Default: retreat toward east edge (dx=1.0)
+        retreat_dir = self._scenario_config.get("enemy_retreat_direction", {"dx": 1.0, "dy": 0.0})
+        self._enemy_retreat_dx = retreat_dir.get("dx", 1.0)
+        self._enemy_retreat_dy = retreat_dir.get("dy", 0.0)
 
     def update_intent(self, game_state: dict):
         """
@@ -132,6 +142,10 @@ class ExConAI:
         Returns:
             List of order dicts with keys: unit_id, order_type, target, params
         """
+        # Get map dimensions from game state (scenario-driven)
+        self._map_width = game_state.get("map_width", 50.0)
+        self._map_height = game_state.get("map_height", 30.0)
+
         self.update_intent(game_state)
 
         enemy_units = [u for u in game_state.get("units", []) if u.get("side") == "enemy"]
@@ -142,6 +156,7 @@ class ExConAI:
 
         ai_logger.debug(f"[AI] Enemy intent: {self._current_intent.value} (aggression: {self._aggression_level:.1f})")
         ai_logger.debug(f"[AI] Processing {len(enemy_units)} enemy units vs {len(player_units)} player units")
+        ai_logger.debug(f"[AI] Map dimensions: {self._map_width}x{self._map_height}")
 
         orders = []
 
@@ -363,7 +378,8 @@ class ExConAI:
             avg_x = sum(u.get("x", 0) for u in enemy_units) / len(enemy_units)
             avg_y = sum(u.get("y", 0) for u in enemy_units) / len(enemy_units)
         else:
-            avg_x, avg_y = 25, 15
+            # Default to center of map (scenario-driven)
+            avg_x, avg_y = self._map_width / 2, self._map_height / 2
 
         return {
             "unit_id": unit.get("id"),
@@ -466,7 +482,8 @@ class ExConAI:
             if p.get("status") != UnitStatus.DESTROYED.value
         ]
         if not alive_units:
-            return {"x": 25, "y": 15}
+            # Default to center of map (scenario-driven)
+            return {"x": self._map_width / 2, "y": self._map_height / 2}
 
         unit_x, unit_y = unit.get("x", 0), unit.get("y", 0)
         nearest = min(
@@ -476,13 +493,19 @@ class ExConAI:
         )
         if nearest:
             return {"x": nearest.get("x", 0), "y": nearest.get("y", 0)}
-        return {"x": 25, "y": 15}
+        return {"x": self._map_width / 2, "y": self._map_height / 2}
 
     def _get_retreat_position(self, unit: dict) -> dict:
-        """Get retreat position (move away from player)"""
-        # Move toward center or away from nearest player
-        x, y = unit.get("x", 25), unit.get("y", 15)
-        return {"x": max(0, min(50, 50 - x)), "y": max(0, min(30, 30 - y))}
+        """Get retreat position (move away from player using scenario-driven direction)"""
+        x, y = unit.get("x", self._map_width / 2), unit.get("y", self._map_height / 2)
+        # Use scenario-driven retreat direction
+        # Default: move toward opposite edge (east when player is west)
+        retreat_x = x + self._enemy_retreat_dx * 10
+        retreat_y = y + self._enemy_retreat_dy * 10
+        return {
+            "x": max(0, min(self._map_width, retreat_x)),
+            "y": max(0, min(self._map_height, retreat_y))
+        }
 
     def _get_flanking_position(
         self,
@@ -491,7 +514,7 @@ class ExConAI:
     ) -> dict:
         """Get flanking position"""
         if not player_units:
-            return {"x": unit.get("x", 25), "y": unit.get("y", 15)}
+            return {"x": unit.get("x", self._map_width / 2), "y": unit.get("y", self._map_height / 2)}
 
         # Find player's center
         player_x = sum(p.get("x", 0) for p in player_units) / len(player_units)
@@ -507,7 +530,10 @@ class ExConAI:
         target_x = unit_x - dy * 0.5
         target_y = unit_y + dx * 0.5
 
-        return {"x": max(0, min(50, target_x)), "y": max(0, min(30, target_y))}
+        return {
+            "x": max(0, min(self._map_width, target_x)),
+            "y": max(0, min(self._map_height, target_y))
+        }
 
     def _get_encirclement_position(
         self,
@@ -516,7 +542,7 @@ class ExConAI:
     ) -> dict:
         """Get position to encircle player forces"""
         if not player_units:
-            return {"x": 25, "y": 15}
+            return {"x": self._map_width / 2, "y": self._map_height / 2}
 
         # Target position behind player
         player_x = sum(p.get("x", 0) for p in player_units) / len(player_units)
@@ -533,7 +559,10 @@ class ExConAI:
         target_x = unit_x + dx * 0.3
         target_y = unit_y + dy * 0.3
 
-        return {"x": max(0, min(50, target_x)), "y": max(0, min(30, target_y))}
+        return {
+            "x": max(0, min(self._map_width, target_x)),
+            "y": max(0, min(self._map_height, target_y))
+        }
 
     def _get_advance_position(
         self,
@@ -557,7 +586,7 @@ class ExConAI:
     ) -> dict:
         """Get position for reconnaissance"""
         if not player_units:
-            return {"x": 25, "y": 15}
+            return {"x": self._map_width / 2, "y": self._map_height / 2}
 
         # Move between enemy lines
         enemy_x = sum(u.get("x", 0) for u in player_units) / len(player_units)

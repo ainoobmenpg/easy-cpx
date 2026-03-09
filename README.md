@@ -76,9 +76,12 @@ easy-cpx/
    cd backend
    python -m venv .venv
    source .venv/bin/activate  # Windows: .venv\Scripts\activate
-   pip install fastapi uvicorn sqlalchemy pydantic httpx
+   pip install fastapi uvicorn sqlalchemy pydantic httpx alembic
    ```
-   Note: App uses SQLite by default (set DATABASE_URL for PostgreSQL)
+   Note: SQLite is used by default. Set DATABASE_URL environment variable for PostgreSQL:
+   ```bash
+   export DATABASE_URL="postgresql://user:password@localhost/operational_cpx"
+   ```
 
 ### Running the Application
 
@@ -113,6 +116,21 @@ Players issue orders in natural Japanese:
 
 ## Development
 
+### Database Migrations (Alembic)
+
+```bash
+cd backend
+
+# Create a new migration
+alembic revision --autogenerate -m "migration description"
+
+# Apply migrations
+alembic upgrade head
+
+# Rollback one migration
+alembic downgrade -1
+```
+
 ### Running Tests
 
 ```bash
@@ -127,8 +145,11 @@ npm run lint
 
 ### API Endpoints
 
-- `GET /api/games` - List games
-- `GET /api/game/{id}/state` - Get game state
+- `GET /api/games/` - List games
+- `POST /api/games/` - Create game
+- `GET /api/games/{game_id}` - Get game by ID
+- `GET /api/games/{game_id}/state` - Get game state (Fog of War applied)
+- `POST /api/games/{game_id}/start` - Start game with scenario
 - `POST /api/parse-order` - Parse player order
 - `POST /api/orders/` - Submit order
 - `POST /api/advance-turn` - Advance turn

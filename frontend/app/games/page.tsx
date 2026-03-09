@@ -1,0 +1,171 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import API from '../lib/api';
+
+interface GameSummary {
+  id: number;
+  name: string;
+  current_turn: number;
+  current_date: string;
+  current_time: string;
+  weather: string;
+  phase: string;
+  is_active: boolean;
+}
+
+export default function GamesPage() {
+  const router = useRouter();
+  const [games, setGames] = useState<GameSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(API.games)
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        console.log('Games loaded:', data);
+        setGames(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Failed to load games:', err);
+        setError('ゲームの読み込みに失敗しました');
+        setLoading(false);
+      });
+  }, []);
+
+  const getPhaseLabel = (phase: string) => {
+    switch (phase) {
+      case 'orders': return '命令入力';
+      case 'adjudication': return '裁定中';
+      case 'sitrep': return 'SITREP表示';
+      default: return phase;
+    }
+  };
+
+  const getWeatherLabel = (weather: string) => {
+    switch (weather) {
+      case 'clear': return '快晴';
+      case 'cloudy': return '曇天';
+      case 'rain': return '雨天';
+      case 'storm': return '嵐';
+      case 'fog': return '霧';
+      case 'night': return '夜間';
+      default: return weather;
+    }
+  };
+
+  const getStatusBadge = (game: GameSummary) => {
+    if (!game.is_active) {
+      return <span className="text-xs px-2 py-1 rounded bg-gray-600 text-gray-300">終了</span>;
+    }
+    switch (game.phase) {
+      case 'orders':
+        return <span className="text-xs px-2 py-1 rounded bg-blue-600 text-white">進行中</span>;
+      case 'adjudication':
+        return <span className="text-xs px-2 py-1 rounded bg-yellow-600 text-white">裁定中</span>;
+      case 'sitrep':
+        return <span className="text-xs px-2 py-1 rounded bg-green-600 text-white">報告待ち</span>;
+      default:
+        return <span className="text-xs px-2 py-1 rounded bg-gray-600 text-gray-300">{game.phase}</span>;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-blue-400 text-xl">ゲームを読み込み中...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-900 text-gray-100">
+      <header className="bg-gray-800/90 border-b border-gray-700/50 px-6 py-4 backdrop-blur-sm">
+        <div className="max-w-6xl mx-auto flex justify-between items-center">
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
+            作戦級CPX - ゲーム一覧
+          </h1>
+          <div className="flex gap-3">
+            <button
+              onClick={() => router.push('/scenarios')}
+              className="text-sm bg-green-600 hover:bg-green-500 px-4 py-2 rounded transition-colors"
+            >
+              新規ゲーム
+            </button>
+            <button
+              onClick={() => router.push('/')}
+              className="text-sm bg-gray-700/50 hover:bg-gray-600/50 px-4 py-2 rounded transition-colors"
+            >
+              Back
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-6xl mx-auto p-6">
+        {error && (
+          <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-6">
+            {error}
+          </div>
+        )}
+
+        {games.length === 0 ? (
+          <div className="text-center py-16">
+            <p className="text-gray-400 text-lg mb-6">ゲームがありません</p>
+            <button
+              onClick={() => router.push('/scenarios')}
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+            >
+              新しいゲームを開始
+            </button>
+          </div>
+        ) : (
+          <>
+            <p className="text-gray-400 mb-6 text-center">
+              既存のゲームを選択するか、新しいゲームを開始してください。
+            </p>
+
+            <div className="space-y-4">
+              {games.map((game) => (
+                <div
+                  key={game.id}
+                  className="bg-gray-800/80 border border-gray-700/50 rounded-xl p-5 hover:border-gray-600/50 transition-all cursor-pointer hover:shadow-lg hover:shadow-gray-900/20"
+                  onClick={() => router.push(`/game?gameId=${game.id}`)}
+                >
+                  <div className="flex justify-between items-center">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h2 className="text-xl font-bold text-blue-300">{game.name}</h2>
+                        {getStatusBadge(game)}
+                      </div>
+                      <div className="flex items-center gap-6 text-sm text-gray-400">
+                        <span>ターン: {game.current_turn}</span>
+                        <span>日付: {game.current_date}</span>
+                        <span>時刻: {game.current_time}</span>
+                        <span>天候: {getWeatherLabel(game.weather)}</span>
+                        <span>フェーズ: {getPhaseLabel(game.phase)}</span>
+                      </div>
+                    </div>
+                    <div className="text-gray-500">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </main>
+    </div>
+  );
+}

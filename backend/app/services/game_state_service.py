@@ -91,12 +91,15 @@ class GameStateService:
 
         return filtered_units
 
-    def build_response(self, state: Dict[str, Any], filtered_units: List[Dict[str, Any]], game: Any) -> Dict[str, Any]:
+    def build_response(self, state: Dict[str, Any], filtered_units: List[Dict[str, Any]], game: Any, known_enemies: Dict[int, Dict[str, Any]]) -> Dict[str, Any]:
         """Build final response with filtered units and game metadata"""
         state["units"] = filtered_units
         state["terrain_data"] = game.terrain_data
         state["map_width"] = game.map_width
         state["map_height"] = game.map_height
+
+        # Include player knowledge for frontend UI (last known enemy positions, etc.)
+        state["player_knowledge"] = known_enemies
 
         return state
 
@@ -120,5 +123,5 @@ def get_game_state_with_fow(db: Session, game_id: int, engine_state: Dict[str, A
     # Apply FoW filtering
     filtered_units = service.apply_fog_of_war(engine_state.get("units", []), known_enemies)
 
-    # Build response
-    return service.build_response(engine_state, filtered_units, game)
+    # Build response (now includes player_knowledge for frontend)
+    return service.build_response(engine_state, filtered_units, game, known_enemies)

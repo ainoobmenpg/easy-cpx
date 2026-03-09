@@ -233,9 +233,12 @@ class Game(Base):
     map_width = Column(Integer, default=50)
     map_height = Column(Integer, default=50)
 
-    units = relationship("Unit", back_populates="game")
-    turns = relationship("Turn", back_populates="game")
-    orders = relationship("Order", back_populates="game")
+    units = relationship("Unit", back_populates="game", cascade="all, delete-orphan")
+    turns = relationship("Turn", back_populates="game", cascade="all, delete-orphan")
+    orders = relationship("Order", back_populates="game", cascade="all, delete-orphan")
+    player_knowledge = relationship("PlayerKnowledge", back_populates="game", cascade="all, delete-orphan")
+    enemy_knowledge = relationship("EnemyKnowledge", back_populates="game", cascade="all, delete-orphan")
+    commander_orders = relationship("CommanderOrder", back_populates="game", cascade="all, delete-orphan")
 
 
 class Unit(Base):
@@ -281,7 +284,9 @@ class Unit(Base):
     precision_munitions = Column(Integer, default=0)  # Guided munitions
 
     game = relationship("Game", back_populates="units")
-    orders = relationship("Order", back_populates="unit")  # 1:N for turn history
+    orders = relationship("Order", back_populates="unit", cascade="all, delete-orphan")  # 1:N for turn history
+    player_knowledge = relationship("PlayerKnowledge", back_populates="unit", viewonly=True)
+    enemy_knowledge = relationship("EnemyKnowledge", back_populates="player_unit", viewonly=True)
 
 
 class Turn(Base):
@@ -300,8 +305,8 @@ class Turn(Base):
     enemy_results = Column(JSON)  # Enemy AI decision results
 
     game = relationship("Game", back_populates="turns")
-    orders = relationship("Order", back_populates="turn")
-    events = relationship("Event", back_populates="turn")
+    orders = relationship("Order", back_populates="turn", cascade="all, delete-orphan")
+    events = relationship("Event", back_populates="turn", cascade="all, delete-orphan")
 
 
 class Order(Base):
@@ -327,7 +332,7 @@ class Order(Base):
     outcome = Column(String)  # success, partial, failed, blocked, cancelled
 
     game = relationship("Game", back_populates="orders")
-    unit = relationship("Unit", back_populates="orders")  # Updated to match Unit.orders
+    unit = relationship("Unit", back_populates="orders")  # cascade handled on Unit side
     turn = relationship("Turn", back_populates="orders")
 
 
@@ -349,10 +354,10 @@ class PlayerKnowledge(Base):
     __tablename__ = "player_knowledge"
 
     id = Column(Integer, primary_key=True, index=True)
-    game_id = Column(Integer, ForeignKey("games.id"))
+    game_id = Column(Integer, ForeignKey("games.id", ondelete="CASCADE"))
 
     # What the player knows
-    unit_id = Column(Integer, ForeignKey("units.id"), nullable=True)
+    unit_id = Column(Integer, ForeignKey("units.id", ondelete="SET NULL"), nullable=True)
     x = Column(Float)
     y = Column(Float)
     area_name = Column(String)
@@ -369,6 +374,10 @@ class PlayerKnowledge(Base):
     # Position accuracy
     position_accuracy = Column(Integer, default=0)  # cells of error
 
+    # Relationships
+    game = relationship("Game", back_populates="player_knowledge")
+    unit = relationship("Unit", back_populates="player_knowledge")
+
 
 # Enemy Knowledge - What enemy knows about player units
 # This tracks enemy reconnaissance and information control
@@ -376,10 +385,10 @@ class EnemyKnowledge(Base):
     __tablename__ = "enemy_knowledge"
 
     id = Column(Integer, primary_key=True, index=True)
-    game_id = Column(Integer, ForeignKey("games.id"))
+    game_id = Column(Integer, ForeignKey("games.id", ondelete="CASCADE"))
 
     # What the enemy knows about player unit
-    player_unit_id = Column(Integer, ForeignKey("units.id"), nullable=True)
+    player_unit_id = Column(Integer, ForeignKey("units.id", ondelete="SET NULL"), nullable=True)
 
     # Known position (may be different from true position due to fog of war)
     known_x = Column(Float, nullable=True)
@@ -397,6 +406,10 @@ class EnemyKnowledge(Base):
 
     # Position accuracy
     position_accuracy = Column(Integer, default=0)  # cells of error
+
+    # Relationships
+    game = relationship("Game", back_populates="enemy_knowledge")
+    player_unit = relationship("Unit", back_populates="enemy_knowledge")
 
 
 # Commander Order - High-level command intent
@@ -426,4 +439,4 @@ class CommanderOrder(Base):
     status = Column(String, default="active")  # active, superseded, completed
     superseded_by = Column(Integer, ForeignKey("commander_orders.id"), nullable=True)
 
-    game = relationship("Game")
+    game = relationship("Game", back_populates="commander_orders")

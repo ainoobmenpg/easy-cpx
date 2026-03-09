@@ -64,8 +64,9 @@
   - ファイル: `backend/app/services/ai_client.py`, `shared/schemas/`
   - 実装: ID型を統一
 
-- [ ] Issue #13: PlayerKnowledgeを実際のplayer viewに接続する `cc:TODO`
-  - ファイル: `backend/app/api/routes.py`, `backend/app/services/sitrep_generator.py`
+- [x] Issue #13: PlayerKnowledgeを実際のplayer viewに接続する `cc:完了`
+  - 実装: player_knowledgeをAPIレスポンス(state)に追加し、 фронтенд が敵の最終確認位置等信息可以利用
+  - ファイル: `backend/app/services/game_state_service.py`
 
 - [x] Issue #14: CommanderOrderとreporting requirementをターン進行へ接続する `cc:完了`
   - 実装: DBのCommanderOrderからreporting_requirementsを取得しReportingSystemに設定
@@ -101,53 +102,86 @@
 
 ### 優先度：P2（リファクタリング・品質）
 
-- [ ] Issue #21: frontendのdefault template名称を整理する `cc:TODO`
+- [x] Issue #21: frontendのdefault template名称を整理する `cc:完了` (2026-03-09)
+  - 実装: Next.jsスキャフォールドの不要ファイル(template/default由来)を削除
+    - public/next.svg, vercel.svg, file.svg, window.svg
+    - app/favicon.ico, page.module.css
   - ファイル: `frontend/`
 
-- [ ] Issue #22: frontend READMEをcreate-next-appの初期文面から置き換える `cc:TODO`
+- [x] Issue #22: frontend READMEをcreate-next-appの初期文面から置き換える `cc:完了`
+  - 実装: create-next-appテンプレートのデフォルト文面を削除し、Operational CPXの説明に置き換え
   - ファイル: `frontend/README.md`
 
-- [ ] Issue #23: SQLite/PostgreSQL/Alembicの設定説明を整理する `cc:TODO`
-  - ファイル: `README.md`, `docs/`
+- [x] Issue #23: SQLite/PostgreSQL/Alembicの設定説明を整理する `cc:完了` (2026-03-09)
+  - 修正: README.mdにDATABASE_URL環境変数・Alembic移行コマンドを追記、.env.exampleにDATABASE_URL追加
+  - APIエンドポイント列表を/games/命名に統一
+  - ファイル: `README.md`, `docs/architecture.md`, `.env.example`
 
-- [ ] Issue #24: route namingを統一する `cc:TODO`
+- [x] Issue #24: route namingを統一する `cc:完了` (2026-03-09)
+  - 修正: 既存のルートは既に/games/*に統一されているのを確認
   - ファイル: `backend/app/api/routes.py`
 
-- [ ] Issue #25: Fog of War向けUI表示をexact markerと分離する `cc:TODO`
+- [x] Issue #25: Fog of War向けUI表示をexact markerと分離する `cc:完了`
+  - 実装: FoW関連UIマーカーを整理
   - ファイル: `frontend/app/game/page.tsx`
 
-- [ ] Issue #26: map rendererとfrontend mapの責務を整理する `cc:TODO`
+- [x] Issue #26: map rendererとfrontend mapの責務を整理する `cc:完了`
+  - 実装: backend map rendererとfrontend mapの責務を整理
   - ファイル: `backend/app/services/`, `frontend/`
 
-- [ ] Issue #27: localizationの混在を修正する `cc:TODO`
-  - ファイル: `backend/`, `frontend/`
+- [x] Issue #27: localizationの混在を修正する `cc:完了` (2026-03-09)
+  - 修正: フロントエンドのUI文字列を日本語に統一（Start Mission→ミッション開始、Cancel→キャンセル、Loading...→読み込み中など）
+  - ファイル: `frontend/app/scenarios/page.tsx`, `frontend/app/debriefing/page.tsx`, `frontend/app/game/page.tsx`
 
-- [ ] Issue #28: logging.basicConfig()をサービスモジュールから外す `cc:TODO`
-  - ファイル: `backend/app/services/*.py`
+- [x] Issue #28: logging.basicConfig()をサービスモジュールから外す `cc:完了`
+  - 実装: adjudication.pyからlogging.basicConfig()を削除、logger定義のみ残存
+  - ファイル: `backend/app/services/adjudication.py`
 
-- [ ] Issue #29: DBモデルにcascade/orphan制御を入れる `cc:TODO`
-  - ファイル: `backend/app/models/`
+- [x] Issue #29: DBモデルにcascade/orphan制御を入れる `cc:完了` (2026-03-09)
+  - 実装: GameからUnit/Turn/Orderへのrelationshipにcascade="all, delete-orphan"を追加
+  - UnitからOrder、TurnからOrder/Eventへのrelationshipもcascade追加
+  - PlayerKnowledge/EnemyKnowledge/CommanderOrderへのrelationshipも追加
+  - ファイル: `backend/app/models/__init__.py`
 
-- [ ] Issue #30: Game一覧・シナリオ選択・開始画面をfrontendに追加する `cc:TODO`
-  - ファイル: `frontend/app/`
+- [x] Issue #30: Game一覧・シナリオ選択・開始画面をfrontendに追加する `cc:完了` (2026-03-09)
+  - 修正: /games页面を追加し、ゲーム一覧表示・継続プレイ機能を実装
+  - ファイル: `frontend/app/games/page.tsx`, `frontend/app/lib/api.ts`
 
-- [ ] Issue #31: debriefingをAAR用に構造化する `cc:TODO`
+- [x] Issue #31: debriefingをAAR用に構造化する `cc:完了` (2026-03-09)
+  - 実装: AAR形式（ver 1.0）に構造化、以下のセクションを追加
+    - executive_summary: 重要指標・評価・コメントの要約
+    - turn_summaries: 各ターンの命令・状況サマリー
+    - combat_analysis: 戦闘力比率・損害分布・戦闘効果分析
+    - resource_analysis: 弾薬・燃料・整備状態の評価
+    - tactical_analysis: 戦術アプローチ・防御評価
+    - lessons_learned: 構造化された教訓（カテゴリ・観察・教訓・影響）
+  - 後方互換性を維持するため旧キー(mission_result, grade, statistics, commentary)も残存
   - ファイル: `backend/app/services/debriefing.py`
 
-- [ ] Issue #32: テスト追加 - Fog of War / terrain stability / target validation / scenario map size `cc:TODO`
-  - ファイル: `backend/tests/`
+- [x] Issue #32: テスト追加 - Fog of War / terrain stability / target validation / scenario map size `cc:完了` (2026-03-09)
+  - 実装: 新規テストファイルtest_p2_issues.pyを作成、以下のテストを追加
+    - Fog of War: プレイヤーUnitの可視性、敵Unit非観測時の情報隠蔽
+    - Terrain Stability: シード固定での地形生成一貫性、異なるシードでの地形差分
+    - Target Validation: 攻撃ターゲットの範囲内/範囲外処理
+    - Scenario Map Size: シナリオ設定からのマップサイズ取得
+  - ファイル: `backend/tests/test_p2_issues.py`
 
-- [ ] Issue #33: OpenAPIサンプルを充实させる `cc:TODO`
+- [x] Issue #33: OpenAPIサンプルを充实させる `cc:完了` (2026-03-09)
+  - 実装: 各Pydantic schemaにjson_schema_extra exampleを追加
   - ファイル: `backend/app/api/routes.py`
 
-- [ ] Issue #34: true-state APIをinternal/admin専用に分離する `cc:TODO`
+- [x] Issue #34: true-state APIをinternal/admin専用に分離する `cc:完了` (2026-03-09)
+  - 実装: /internal/games/{id}/true-state と /internal/games/{id}/units エンドポイントを追加、既存の/games/{id}/unitsはFoW適用に変更
   - ファイル: `backend/app/api/routes.py`
 
-- [ ] Issue #35: ExConの戦術ロジックをscenario非依存にする `cc:TODO`
+- [x] Issue #35: ExConの戦術ロジックをscenario非依存にする `cc:完了` (2026-03-09)
+  - 実装: ハードコードされたマップサイズ(50, 30)をgame_stateから取得、scenario非依存に
   - ファイル: `backend/app/services/excon_ai.py`
 
-- [ ] Issue #36: frontendとbackendのroute/DTO共通定義をsharedに寄せる `cc:TODO`
-  - ファイル: `shared/`, `backend/app/api/`, `frontend/`
+- [x] Issue #36: frontendとbackendのroute/DTO共通定義をsharedに寄せる `cc:完了` (2026-03-09)
+  - 実装: shared/types/index.tsにUnit, GameState, Sitrep, TurnLog, API Response型を追加
+  - frontendのgame/page.tsxでshared/typesをimportして使用、tsconfig.jsonに@sharedパス追加
+  - ファイル: `shared/types/index.ts`, `frontend/tsconfig.json`, `frontend/app/game/page.tsx`
 
 ---
 

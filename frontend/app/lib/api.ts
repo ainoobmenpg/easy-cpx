@@ -8,14 +8,15 @@ export const API = {
   baseUrl: API_BASE_URL,
 
   // Game endpoints
-  games: `${API_BASE_URL}/api/games`,
-  gameState: (gameId: string | number) => `${API_BASE_URL}/api/game/${toId(gameId)}/state`,
+  games: `${API_BASE_URL}/api/games/`,
+  game: (gameId: string | number) => `${API_BASE_URL}/api/games/${toId(gameId)}`,
+  gameState: (gameId: string | number) => `${API_BASE_URL}/api/games/${toId(gameId)}/state`,
   gameUnits: (gameId: string | number) => `${API_BASE_URL}/api/games/${toId(gameId)}/units`,
   createUnit: (gameId: string | number) => `${API_BASE_URL}/api/games/${toId(gameId)}/units/`,
-  gameSitrep: (gameId: string | number) => `${API_BASE_URL}/api/game/${toId(gameId)}/sitrep`,
-  gameDebriefing: (gameId: string | number) => `${API_BASE_URL}/api/game/${toId(gameId)}/debriefing`,
-  gameStart: `${API_BASE_URL}/api/game/start`,
-  gameEnd: `${API_BASE_URL}/api/game/end`,
+  gameSitrep: (gameId: string | number) => `${API_BASE_URL}/api/games/${toId(gameId)}/sitrep`,
+  gameDebriefing: (gameId: string | number) => `${API_BASE_URL}/api/games/${toId(gameId)}/debriefing`,
+  gameStart: `${API_BASE_URL}/api/games/start`,
+  gameEnd: (gameId: string | number) => `${API_BASE_URL}/api/games/${toId(gameId)}/end`,
 
   // Order endpoints
   parseOrder: `${API_BASE_URL}/api/parse-order`,

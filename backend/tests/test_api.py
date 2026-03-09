@@ -89,7 +89,7 @@ class TestGameEndpoints:
         assert response.status_code == 404
 
     def test_get_game_units(self, client, test_db):
-        """Test GET /api/games/{id}/units"""
+        """Test GET /api/games/{id}/units - returns FoW-filtered game state"""
         # Create game and units
         from app.models import Unit, UnitStatus, SupplyLevel
 
@@ -116,8 +116,10 @@ class TestGameEndpoints:
         response = client.get(f"/api/games/{game.id}/units")
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 1
-        assert data[0]["name"] == "Test Unit"
+        # Now returns full game state with FoW applied (not just units array)
+        assert "units" in data
+        assert len(data["units"]) == 1
+        assert data["units"][0]["name"] == "Test Unit"
 
     def test_create_unit(self, client, test_db):
         """Test POST /api/games/{id}/units/"""
@@ -229,13 +231,13 @@ class TestGameStateEndpoint:
     """Test game state endpoint"""
 
     def test_get_game_state(self, client, test_db):
-        """Test GET /api/game/{id}/state"""
+        """Test GET /api/games/{id}/state"""
         game = Game(name="Test Game", current_turn=1, current_time="06:00", weather="clear")
         test_db.add(game)
         test_db.commit()
         test_db.refresh(game)
 
-        response = client.get(f"/api/game/{game.id}/state")
+        response = client.get(f"/api/games/{game.id}/state")
         assert response.status_code == 200
         data = response.json()
         assert data["turn"] == 1
@@ -243,7 +245,7 @@ class TestGameStateEndpoint:
 
     def test_get_game_state_not_found(self, client):
         """Test get game state with invalid id"""
-        response = client.get("/api/game/999/state")
+        response = client.get("/api/games/999/state")
         assert response.status_code == 404
 
 
@@ -322,7 +324,7 @@ class TestSitrepEndpoint:
     """Test SITREP endpoint"""
 
     def test_get_sitrep(self, client, test_db):
-        """Test GET /api/game/{id}/sitrep"""
+        """Test GET /api/games/{id}/sitrep"""
         from app.models import Turn
 
         game = Game(name="Test Game", current_turn=2, current_time="07:00", weather="clear")
@@ -342,7 +344,7 @@ class TestSitrepEndpoint:
         test_db.add(turn)
         test_db.commit()
 
-        response = client.get(f"/api/game/{game.id}/sitrep")
+        response = client.get(f"/api/games/{game.id}/sitrep")
         assert response.status_code == 200
 
     def test_get_sitrep_not_found(self, client, test_db):
@@ -352,12 +354,12 @@ class TestSitrepEndpoint:
         test_db.commit()
         test_db.refresh(game)
 
-        response = client.get(f"/api/game/{game.id}/sitrep")
+        response = client.get(f"/api/games/{game.id}/sitrep")
         assert response.status_code == 200
         data = response.json()
         assert "message" in data
 
     def test_get_sitrep_game_not_found(self, client):
         """Test get SITREP with invalid game"""
-        response = client.get("/api/game/999/sitrep")
+        response = client.get("/api/games/999/sitrep")
         assert response.status_code == 404

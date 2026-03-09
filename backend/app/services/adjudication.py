@@ -7,12 +7,6 @@ import random
 import math
 import logging
 
-# Configure logging for development
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%H:%M:%S'
-)
 logger = logging.getLogger("cpx")
 
 # Import unit profiles for behavior and compatibility

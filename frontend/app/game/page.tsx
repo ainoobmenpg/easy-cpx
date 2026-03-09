@@ -3,69 +3,39 @@
 import { useState, useEffect, useRef, useMemo, useCallback, memo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import API from '../lib/api';
-
-interface Unit {
-  id: number;
-  name: string;
-  type: string;
-  side: 'player' | 'enemy';
-  x: number;
-  y: number;
-  status: string;
-  ammo: string;
-  fuel: string;
-  readiness: string;
-  strength: number;
-  infantry_subtype?: string;
-  recon_value?: number;
-  visibility_range?: number;
-  observation_confidence?: string;
-  last_observed_turn?: number;
-  // Extended reconnaissance fields
-  confidence_score?: number;
-  estimated_x?: number;
-  estimated_y?: number;
-  position_accuracy?: number;
-  last_known_type?: string;
-  observation_sources?: Array<{ observer_id: number; confidence: number }>;
-}
-
-interface GameState {
-  game_id: number;
-  turn: number;
-  time: string;
-  date: string;
-  weather: string;
-  phase: string;
-  is_night: boolean;
-  terrain: Record<string, string>;
-  terrain_info: Record<string, { symbol: string; color: string; name: string }>;
-  weather_effects: Record<string, any>;
-  units: Unit[];
-}
-
-interface Sitrep {
-  turn: number;
-  sections: { type: string; content: string; confidence: string }[];
-}
-
-interface TurnLog {
-  turn: number;
-  orders: { unit: string; outcome: string }[];
-}
+import type { Unit, GameState, Sitrep, TurnLog } from '@shared/types';
 
 // Memoized Unit component for performance
+// FoW display: show exact position marker and UI position marker separately
 const UnitMarker = memo(function UnitMarker({
   unit,
   selectedUnitId,
-  onSelect
+  onSelect,
+  showExactPosition = false
 }: {
   unit: Unit;
   selectedUnitId: number | null;
   onSelect: (unit: Unit) => void;
+  showExactPosition?: boolean; // Show exact position marker (for internal/debug view)
 }) {
-  const svgX = Math.floor(unit.x) + 0.5;
-  const svgY = Math.floor(unit.y) + 0.5;
+  // FoW: Determine displayed position based on observation confidence
+  const isEnemy = unit.side === 'enemy';
+  const confidence = unit.observation_confidence;
+  const hasEstimatedPosition = isEnemy && (confidence === 'unknown' || confidence === 'estimated') &&
+    unit.estimated_x !== undefined && unit.estimated_y !== undefined;
+
+  // UI display position (what player sees)
+  const displayX = hasEstimatedPosition ? unit.estimated_x! : unit.x;
+  const displayY = hasEstimatedPosition ? unit.estimated_y! : unit.y;
+
+  // Exact position (true position - for internal use)
+  const exactX = unit.x;
+  const exactY = unit.y;
+
+  const svgX = Math.floor(displayX) + 0.5;
+  const svgY = Math.floor(displayY) + 0.5;
+  const exactSvgX = Math.floor(exactX) + 0.5;
+  const exactSvgY = Math.floor(exactY) + 0.5;
   const sideColor = unit.side === 'player' ? '#3b82f6' : '#ef4444';
   const isSelected = selectedUnitId === unit.id;
 
@@ -90,35 +60,52 @@ const UnitMarker = memo(function UnitMarker({
   };
   const statusColor = statusColors[unit.status] || '#22c55e';
 
-  // Observation confidence styling for enemy units
-  const isEnemy = unit.side === 'enemy';
-  const confidence = unit.observation_confidence;
+  // Observation confidence styling for enemy units - FoW display
   const confidenceScore = unit.confidence_score;
   let confidenceOpacity = 1.0;
   let confidenceBorder = false;
   let confidenceLabel = '';
+  let isEstimatedMarker = false; // Show different marker for estimated position
+
   if (isEnemy && confidence) {
     if (confidence === 'unknown') {
       confidenceOpacity = 0.5; // Unknown - more transparent
       confidenceBorder = true;
       confidenceLabel = confidenceScore !== undefined ? `${confidenceScore}%` : '?';
+      isEstimatedMarker = hasEstimatedPosition;
     } else if (confidence === 'estimated') {
       confidenceOpacity = 0.75; // Estimated - slightly transparent
       confidenceBorder = true;
       confidenceLabel = confidenceScore !== undefined ? `${confidenceScore}%` : '~';
+      isEstimatedMarker = hasEstimatedPosition;
     } else {
-      // confirmed
+      // confirmed - fully opaque, no border
       confidenceLabel = confidenceScore !== undefined ? `${confidenceScore}%` : 'OK';
     }
-    // confirmed - fully opaque, no border
   }
+
+  // FoW marker: different symbol for estimated position
+  const markerSymbol = isEstimatedMarker ? '?' : symbol;
 
   return (
     <g onClick={() => onSelect(unit)} style={{ cursor: 'pointer' }}>
+      {/* Exact position marker - shown when showExactPosition is true (for internal/debug view) */}
+      {showExactPosition && isEnemy && (
+        <g>
+          <circle cx={exactSvgX} cy={exactSvgY} r="0.5" fill="none" stroke="#ff00ff" strokeWidth="0.15" strokeDasharray="0.15,0.1" opacity={0.8} />
+          <text x={exactSvgX - 0.8} y={exactSvgY - 0.6} fontSize="0.35" fill="#ff00ff" fontWeight="bold" opacity={0.9}>
+            EXACT
+          </text>
+        </g>
+      )}
+      {/* FoW estimated position marker - dashed circle */}
+      {isEstimatedMarker && (
+        <circle cx={svgX} cy={svgY} r="0.7" fill="none" stroke="#fbbf24" strokeWidth="0.1" strokeDasharray="0.2,0.1" opacity={confidenceOpacity * 0.7} />
+      )}
       <rect x={svgX - 0.6} y={svgY - 0.5} width="1.2" height="1.0"
         fill={sideColor} stroke={isSelected ? '#fff' : (confidenceBorder ? '#fbbf24' : 'none')} strokeWidth="0.1" opacity={confidenceOpacity * 0.95}/>
       <text x={svgX} y={svgY + 0.2} fontSize="0.8" fill="#fff" textAnchor="middle" fontWeight="bold" opacity={confidenceOpacity}>
-        {symbol}
+        {markerSymbol}
       </text>
       <text x={svgX + 0.8} y={svgY + 0.8} fontSize="0.5" fill="#fff" stroke="#000" strokeWidth="0.15" paintOrder="stroke" fontWeight="bold" opacity={confidenceOpacity}>
         {unit.name}{confidenceLabel ? ` (${confidenceLabel})` : ''}
@@ -142,6 +129,7 @@ function GameContent() {
   const [showHelp, setShowHelp] = useState(true);
   const [turnLogs, setTurnLogs] = useState<TurnLog[]>([]);
   const [zoom, setZoom] = useState(1);
+  const [showExactPosition, setShowExactPosition] = useState(false); // FoW debug: show exact position markers
   const [error, setError] = useState<string | null>(null);
   // Map pan state (for drag to pan)
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -486,12 +474,12 @@ function GameContent() {
     <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white">
       {error ? (
         <div className="bg-red-900/50 border border-red-500 text-red-200 p-4 rounded-lg">
-          <p className="font-bold">Error loading game</p>
+          <p className="font-bold">ゲーム読み込みエラー</p>
           <p className="text-sm">{error}</p>
-          <button onClick={fetchGameState} aria-label="再試行" className="mt-2 px-4 py-1 bg-red-600 hover:bg-red-500 rounded text-sm">Retry</button>
+          <button onClick={fetchGameState} aria-label="再試行" className="mt-2 px-4 py-1 bg-red-600 hover:bg-red-500 rounded text-sm">再試行</button>
         </div>
       ) : (
-        <div>Loading...</div>
+        <div>読み込み中...</div>
       )}
     </div>
   );
@@ -502,6 +490,7 @@ function GameContent() {
       <header className={`border-b border-gray-700/50 px-4 py-2 flex justify-between items-center shrink-0 backdrop-blur-sm ${gameState.is_night ? 'bg-slate-900/80' : 'bg-gray-800/80'}`}>
         <div className="flex items-center gap-4">
           <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">作戦級CPX</h1>
+          <button onClick={() => router.push('/games')} aria-label="ゲーム一覧" className="text-xs bg-gray-700/50 hover:bg-gray-600/50 px-3 py-1 rounded backdrop-blur transition-colors">一覧</button>
           <button onClick={() => setShowHelp(!showHelp)} aria-label="ヘルプ表示切替" className="text-xs bg-gray-700/50 hover:bg-gray-600/50 px-3 py-1 rounded backdrop-blur transition-colors">{showHelp ? 'ガイド' : '表示'}</button>
         </div>
         <div className="flex gap-6 text-sm items-center">
@@ -592,7 +581,7 @@ function GameContent() {
               ))}
               {/* Units - use memoized UnitMarker component */}
               {unitList.map((unit) => (
-                <UnitMarker key={unit.id} unit={unit} selectedUnitId={selectedUnit?.id || null} onSelect={handleUnitSelect} />
+                <UnitMarker key={unit.id} unit={unit} selectedUnitId={selectedUnit?.id || null} onSelect={handleUnitSelect} showExactPosition={showExactPosition} />
               ))}
             </svg>
           </div>
@@ -602,6 +591,9 @@ function GameContent() {
             <button onClick={handleZoomIn} aria-label="マップをzoom in" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-lg font-bold transition-colors border border-gray-600/30">+</button>
             <button onClick={handleZoomOut} aria-label="マップをzoom out" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-lg font-bold transition-colors border border-gray-600/30">−</button>
             <button onClick={handleZoomReset} aria-label="ズームをリセット" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30">Reset</button>
+            <button onClick={() => setShowExactPosition(!showExactPosition)} aria-label="FoWデバッグ表示切替" className={`w-9 h-9 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30 ${showExactPosition ? 'bg-purple-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="FoW debug: Show exact positions">
+              FoW
+            </button>
           </div>
 
           {/* Map Info - modern style */}
@@ -776,7 +768,7 @@ export default function GamePage() {
   return (
     <Suspense fallback={
       <div className="h-screen bg-gray-900 flex items-center justify-center text-white">
-        Loading...
+        読み込み中...
       </div>
     }>
       <GameContent />

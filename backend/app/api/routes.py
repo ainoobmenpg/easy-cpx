@@ -1,7 +1,7 @@
 # Game API Routes
 from fastapi import APIRouter, Depends, HTTPException, Query, Path
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import Literal
 from typing import Optional, List
 from app.database import get_db
@@ -18,6 +18,10 @@ router = APIRouter()
 
 # Pydantic schemas for request bodies
 class GameCreate(BaseModel):
+    model_config = ConfigDict(json_schema_extra={
+        "example": {"name": "Operation Desert Storm"}
+    })
+
     name: str = Field(..., min_length=1, max_length=100)
 
 
@@ -82,27 +86,17 @@ def get_game(game_id: int, db: Session = Depends(get_db)):
 
 @router.get("/games/{game_id}/units")
 def get_game_units(game_id: int, db: Session = Depends(get_db)):
-    """Get all units for a game"""
+    """Get player-visible units for a game (Fog of War applied)"""
     game = db.query(Game).filter(Game.id == game_id).first()
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
-    units = db.query(Unit).filter(Unit.game_id == game_id).all()
-    return [
-        {
-            "id": u.id,
-            "name": u.name,
-            "type": u.unit_type,
-            "side": u.side,
-            "x": u.x,
-            "y": u.y,
-            "status": u.status.value if u.status else None,
-            "ammo": u.ammo.value if u.ammo else None,
-            "fuel": u.fuel.value if u.fuel else None,
-            "readiness": u.readiness.value if u.readiness else None,
-            "strength": u.strength
-        }
-        for u in units
-    ]
+
+    # Get internal engine state
+    engine = RuleEngine(db)
+    engine_state = engine.get_game_state(game_id)
+
+    # Apply Fog of War
+    return get_game_state_with_fow(db, game_id, engine_state)
 
 
 @router.post("/games/{game_id}/units/")
@@ -135,6 +129,19 @@ def create_unit(
 
 # Pydantic schemas
 class OrderCreate(BaseModel):
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "unit_id": 1,
+            "order_type": "move",
+            "target_units": None,
+            "intent": "第1大隊を地点Aへ移動し、敵主力部隊を攻撃せよ",
+            "location_x": 25.0,
+            "location_y": 30.0,
+            "location_name": "地点A",
+            "priority": "high"
+        }
+    })
+
     unit_id: int = Field(..., gt=0)
     order_type: Literal["move", "attack", "defend", "support", "retreat", "recon", "supply", "special"]
     target_units: Optional[List[int]] = None
@@ -155,11 +162,22 @@ class OrderCreate(BaseModel):
 
 
 class OrderParseRequest(BaseModel):
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "player_input": "第1戦車大隊は北方から敵装甲部隊の側面を突け。第2歩兵大隊は前線を維持し火力支援を行え。",
+            "game_id": 1
+        }
+    })
+
     player_input: str = Field(..., min_length=1, max_length=2000)
     game_id: int = Field(..., gt=0)
 
 
 class TurnAdvanceRequest(BaseModel):
+    model_config = ConfigDict(json_schema_extra={
+        "example": {"game_id": 1}
+    })
+
     game_id: int = Field(..., gt=0)
 
 
@@ -297,7 +315,7 @@ async def advance_turn(request: TurnAdvanceRequest, db: Session = Depends(get_db
     }
 
 
-@router.get("/game/{game_id}/state")
+@router.get("/games/{game_id}/state")
 def get_game_state(game_id: int, db: Session = Depends(get_db)):
     """Get current game state with Fog of War applied"""
     # Validate game exists
@@ -313,7 +331,47 @@ def get_game_state(game_id: int, db: Session = Depends(get_db)):
     return get_game_state_with_fow(db, game_id, engine_state)
 
 
-@router.get("/game/{game_id}/sitrep")
+# Internal/Debug endpoints - exposes true state (FOR AUTHORIZED USE ONLY)
+@router.get("/internal/games/{game_id}/true-state")
+def get_true_state(game_id: int, db: Session = Depends(get_db)):
+    """
+    Get internal game state with full truth (Fog of War NOT applied).
+    WARNING: This endpoint exposes all enemy positions, ammo, fuel, etc.
+    Only use for debugging, admin panels, or internal services.
+    """
+    game = db.query(Game).filter(Game.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    # Get internal engine state (full truth)
+    engine = RuleEngine(db)
+    engine_state = engine.get_game_state(game_id)
+
+    # Add game metadata
+    engine_state["terrain_data"] = game.terrain_data
+    engine_state["map_width"] = game.map_width
+    engine_state["map_height"] = game.map_height
+
+    return engine_state
+
+
+@router.get("/internal/games/{game_id}/units")
+def get_internal_units(game_id: int, db: Session = Depends(get_db)):
+    """
+    Get all units with full truth (Fog of War NOT applied).
+    WARNING: This exposes all enemy positions and status.
+    Only use for debugging or internal services.
+    """
+    game = db.query(Game).filter(Game.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    engine = RuleEngine(db)
+    engine_state = engine.get_game_state(game_id)
+    return engine_state.get("units", [])
+
+
+@router.get("/games/{game_id}/sitrep")
 def get_sitrep(game_id: int, turn: int = None, db: Session = Depends(get_db)):
     """Get SITREP for specified turn or latest available"""
     game = db.query(Game).filter(Game.id == game_id).first()
@@ -333,6 +391,10 @@ def get_sitrep(game_id: int, turn: int = None, db: Session = Depends(get_db)):
 
 
 class MoveUnitRequest(BaseModel):
+    model_config = ConfigDict(json_schema_extra={
+        "example": {"x": 25.0, "y": 30.0}
+    })
+
     x: float = Field(..., ge=0, le=100)
     y: float = Field(..., ge=0, le=100)
 
@@ -372,11 +434,18 @@ def get_scenario(scenario_id: str):
 
 
 class GameStartRequest(BaseModel):
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "scenario_id": "israel_2026",
+            "game_name": "Operation Judea 2026"
+        }
+    })
+
     scenario_id: str = Field(..., min_length=1, max_length=100)
     game_name: str = Field(..., min_length=1, max_length=100)
 
 
-@router.post("/game/start")
+@router.post("/games/start")
 def start_game(request: GameStartRequest, db: Session = Depends(get_db)):
     """Start a new game from a scenario"""
     manager = ScenarioManager()
@@ -392,7 +461,7 @@ def start_game(request: GameStartRequest, db: Session = Depends(get_db)):
 
 
 # Debriefing endpoints
-@router.get("/game/{game_id}/debriefing")
+@router.get("/games/{game_id}/debriefing")
 async def get_debriefing(game_id: int, db: Session = Depends(get_db)):
     """Get debriefing report for a game"""
     game = db.query(Game).filter(Game.id == game_id).first()
@@ -404,10 +473,14 @@ async def get_debriefing(game_id: int, db: Session = Depends(get_db)):
 
 
 class EndGameRequest(BaseModel):
+    model_config = ConfigDict(json_schema_extra={
+        "example": {"game_id": 1}
+    })
+
     game_id: int = Field(..., gt=0)
 
 
-@router.post("/game/end")
+@router.post("/games/{game_id}/end")
 def end_game(request: EndGameRequest, db: Session = Depends(get_db)):
     """End a game and mark it as inactive"""
     game = db.query(Game).filter(Game.id == request.game_id).first()

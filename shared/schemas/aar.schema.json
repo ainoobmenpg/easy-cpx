@@ -1,0 +1,294 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://operational-cpx.example.com/schemas/aar.schema.json",
+  "title": "AAR - After Action Report",
+  "description": "Structured debriefing report for game post-analysis",
+  "type": "object",
+  "required": ["aar_format", "game_id", "game_name", "executive_summary", "turn_summaries", "combat_analysis"],
+  "properties": {
+    "aar_format": {
+      "type": "string",
+      "description": "AAR schema version format",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "game_id": {
+      "type": "integer",
+      "description": "Unique game identifier"
+    },
+    "game_name": {
+      "type": "string",
+      "description": "Name of the game/scenario"
+    },
+    "scenario_id": {
+      "type": "string",
+      "description": "Scenario identifier"
+    },
+    "total_turns": {
+      "type": "integer",
+      "description": "Total number of turns played",
+      "minimum": 0
+    },
+    "duration": {
+      "type": "object",
+      "description": "Game duration information",
+      "properties": {
+        "start_date": {
+          "type": "string",
+          "description": "Game start date"
+        },
+        "start_time": {
+          "type": "string",
+          "description": "Game start time"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "Game end date"
+        },
+        "end_turn": {
+          "type": "integer",
+          "description": "Turn number when game ended"
+        }
+      }
+    },
+    "executive_summary": {
+      "type": "object",
+      "description": "High-level summary of mission performance",
+      "required": ["grade", "mission_result", "overview"],
+      "properties": {
+        "grade": {
+          "type": "string",
+          "description": "Final grade (S, A, B, C, D)",
+          "enum": ["S", "A", "B", "C", "D"]
+        },
+        "mission_result": {
+          "type": "object",
+          "description": "Mission completion status",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": ["success", "partial", "failed"]
+            },
+            "description": {
+              "type": "string"
+            },
+            "player_casualty_rate": {
+              "type": "number"
+            },
+            "enemy_destruction_rate": {
+              "type": "number"
+            }
+          }
+        },
+        "overview": {
+          "type": "string",
+          "description": "AI-generated mission overview"
+        },
+        "key_metrics": {
+          "type": "object",
+          "description": "Key performance metrics",
+          "properties": {
+            "player_casualty_rate": {
+              "type": "number"
+            },
+            "enemy_destruction_rate": {
+              "type": "number"
+            },
+            "player_units_remaining": {
+              "type": "integer"
+            },
+            "enemy_units_destroyed": {
+              "type": "integer"
+            },
+            "resource_crisis_count": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    },
+    "turn_summaries": {
+      "type": "array",
+      "description": "Summary for each turn",
+      "items": {
+        "type": "object",
+        "properties": {
+          "turn_number": {
+            "type": "integer"
+          },
+          "time": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "weather": {
+            "type": "string"
+          },
+          "orders_issued": {
+            "type": "integer"
+          },
+          "orders_breakdown": {
+            "type": "object",
+            "properties": {
+              "move": { "type": "integer" },
+              "attack": { "type": "integer" },
+              "defend": { "type": "integer" },
+              "support": { "type": "integer" }
+            }
+          },
+          "sitrep_summary": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "combat_analysis": {
+      "type": "object",
+      "description": "Detailed combat effectiveness analysis",
+      "properties": {
+        "combat_power_ratio": {
+          "type": "number"
+        },
+        "player_damage_distribution": {
+          "type": "object",
+          "properties": {
+            "heavy": { "type": "integer" },
+            "medium": { "type": "integer" },
+            "light": { "type": "integer" },
+            "intact": { "type": "integer" },
+            "destroyed": { "type": "integer" }
+          }
+        },
+        "enemy_damage_distribution": {
+          "type": "object",
+          "properties": {
+            "heavy": { "type": "integer" },
+            "medium": { "type": "integer" },
+            "light": { "type": "integer" },
+            "intact": { "type": "integer" },
+            "destroyed": { "type": "integer" }
+          }
+        },
+        "combat_effectiveness": {
+          "type": "object",
+          "properties": {
+            "kill_ratio": { "type": "number" },
+            "rating": {
+              "type": "string",
+              "enum": ["excellent", "good", "adequate", "poor"]
+            },
+            "player_units_destroyed": { "type": "integer" },
+            "enemy_units_destroyed": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "resource_analysis": {
+      "type": "object",
+      "description": "Resource management analysis",
+      "properties": {
+        "ammo_status": {
+          "type": "object",
+          "properties": {
+            "depleted": { "type": "integer" },
+            "low": { "type": "integer" },
+            "severity": {
+              "type": "string",
+              "enum": ["normal", "warning", "critical"]
+            }
+          }
+        },
+        "fuel_status": {
+          "type": "object",
+          "properties": {
+            "depleted": { "type": "integer" },
+            "low": { "type": "integer" },
+            "severity": {
+              "type": "string",
+              "enum": ["normal", "warning", "critical"]
+            }
+          }
+        },
+        "readiness_status": {
+          "type": "object",
+          "properties": {
+            "degraded": { "type": "integer" },
+            "severity": {
+              "type": "string",
+              "enum": ["normal", "warning", "critical"]
+            }
+          }
+        },
+        "overall_severity": {
+          "type": "string",
+          "enum": ["optimal", "manageable", "concerning", "critical"]
+        }
+      }
+    },
+    "tactical_analysis": {
+      "type": "object",
+      "description": "Tactical approach analysis",
+      "properties": {
+        "offensive_approach": {
+          "type": "string",
+          "enum": ["aggressive", "balanced", "defensive"]
+        },
+        "defensive_rating": {
+          "type": "string",
+          "enum": ["excellent", "good", "adequate", "poor"]
+        },
+        "efficiency_score": {
+          "type": "number"
+        },
+        "tactical_recommendations": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "lessons_learned": {
+      "type": "array",
+      "description": "Structured lessons learned",
+      "items": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": ["force_protection", "offensive_operations", "logistics"]
+          },
+          "observation": {
+            "type": "string"
+          },
+          "lesson": {
+            "type": "string"
+          },
+          "impact": {
+            "type": "string",
+            "enum": ["positive", "medium", "high", "low"]
+          }
+        }
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "description": "Actionable recommendations",
+      "items": { "type": "string" }
+    },
+    "statistics": {
+      "type": "object",
+      "description": "Raw statistics data (legacy compatibility)"
+    },
+    "mission_result": {
+      "type": "object",
+      "description": "Mission result (legacy compatibility)"
+    },
+    "grade": {
+      "type": "string",
+      "description": "Final grade (legacy compatibility)"
+    },
+    "commentary": {
+      "type": "string",
+      "description": "AI commentary (legacy compatibility)"
+    }
+  }
+}

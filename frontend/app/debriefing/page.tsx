@@ -113,7 +113,7 @@ function DebriefingContent() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-blue-400 text-xl">Loading debriefing...</div>
+        <div className="text-blue-400 text-xl">ミッション評価を読み込み中...</div>
       </div>
     );
   }
@@ -122,7 +122,7 @@ function DebriefingContent() {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="bg-red-900/50 border border-red-500 p-6 rounded-lg text-center">
-          <p className="text-red-200 mb-4">{error || 'Failed to load debriefing'}</p>
+          <p className="text-red-200 mb-4">{error || 'ミッション評価の読み込みに失敗しました'}</p>
           <button
             onClick={() => router.push('/scenarios')}
             className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded"
@@ -289,13 +289,13 @@ function DebriefingContent() {
             onClick={() => router.push(`/game?gameId=${gameId}`)}
             className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-lg transition-colors"
           >
-            Retry Mission
+            ミッション再挑戦
           </button>
           <button
             onClick={() => router.push('/scenarios')}
             className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg transition-colors"
           >
-            Select Different Scenario
+            シナリオ選択へ
           </button>
         </div>
       </main>
@@ -307,7 +307,7 @@ export default function DebriefingPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-blue-400 text-xl">Loading...</div>
+        <div className="text-blue-400 text-xl">読み込み中...</div>
       </div>
     }>
       <DebriefingContent />

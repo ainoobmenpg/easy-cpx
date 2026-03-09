@@ -1,12 +1,23 @@
 # Debriefing Generator Service
-# Generates post-game evaluation reports
+# Generates post-game evaluation reports (AAR - After Action Report)
 import random
 from typing import Dict, Any, List, Optional
 from app.services.ai_client import AIClient
 
 
+class AARSection:
+    """AAR report section identifiers"""
+    EXECUTIVE_SUMMARY = "executive_summary"
+    TURN_SUMMARIES = "turn_summaries"
+    COMBAT_ANALYSIS = "combat_analysis"
+    RESOURCE_ANALYSIS = "resource_analysis"
+    TACTICAL_ANALYSIS = "tactical_analysis"
+    STRATEGIC_INSIGHTS = "strategic_insights"
+    LESSONS_LEARNED = "lessons_learned"
+
+
 class DebriefingGenerator:
-    """Service for generating game debriefing reports"""
+    """Service for generating After Action Reports (AAR)"""
 
     def __init__(self):
         self.ai = AIClient()
@@ -16,8 +27,8 @@ class DebriefingGenerator:
         game_id: int,
         db: Any
     ) -> Dict[str, Any]:
-        """Generate comprehensive debriefing report"""
-        from app.models import Game, Unit, Turn
+        """Generate comprehensive AAR debriefing report"""
+        from app.models import Game, Unit, Turn, Order
 
         game = db.query(Game).filter(Game.id == game_id).first()
         if not game:
@@ -35,7 +46,15 @@ class DebriefingGenerator:
         # Generate AI commentary
         commentary = await self._generate_commentary(stats, mission_result, game)
 
+        # Generate AAR-specific sections
+        turn_summaries = self._generate_turn_summaries(db, game)
+        combat_analysis = self._generate_combat_analysis(db, game)
+        tactical_analysis = self._generate_tactical_analysis(stats, game)
+        lessons_learned = self._generate_lessons_learned(stats, mission_result)
+
+        # Build structured AAR response
         return {
+            "aar_format": "1.0",
             "game_id": game_id,
             "game_name": game.name,
             "scenario_id": game.scenario_id,
@@ -46,12 +65,304 @@ class DebriefingGenerator:
                 "end_date": game.current_date,
                 "end_turn": game.current_turn - 1
             },
-            "statistics": stats,
+            # Main sections
+            "executive_summary": {
+                "grade": grade,
+                "mission_result": mission_result,
+                "overview": commentary,
+                "key_metrics": self._extract_key_metrics(stats)
+            },
+            "turn_summaries": turn_summaries,
+            "combat_analysis": combat_analysis,
+            "resource_analysis": self._generate_resource_analysis(stats),
+            "tactical_analysis": tactical_analysis,
+            "lessons_learned": lessons_learned,
+            "recommendations": self._generate_recommendations(stats, mission_result),
+            # Legacy compatibility - keep top-level keys for backward compatibility
             "mission_result": mission_result,
             "grade": grade,
-            "commentary": commentary,
-            "recommendations": self._generate_recommendations(stats, mission_result)
+            "statistics": stats,
+            "commentary": commentary
         }
+
+    def _extract_key_metrics(self, stats: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract key metrics for executive summary"""
+        return {
+            "player_casualty_rate": stats["player"]["casualty_rate"],
+            "enemy_destruction_rate": stats["enemy"]["destruction_rate"],
+            "player_units_remaining": stats["player"]["intact"],
+            "enemy_units_destroyed": stats["enemy"]["destroyed"],
+            "resource_crisis_count": (
+                stats["resources"]["ammo_depleted_units"] +
+                stats["resources"]["fuel_depleted_units"]
+            )
+        }
+
+    def _generate_turn_summaries(self, db: Any, game: Any) -> List[Dict[str, Any]]:
+        """Generate summary for each turn"""
+        from app.models import Turn, Order
+
+        turns = db.query(Turn).filter(Turn.game_id == game.id).order_by(Turn.turn_number).all()
+        summaries = []
+
+        for turn in turns:
+            orders = db.query(Order).filter(Order.turn_id == turn.id).all() if turn.id else []
+
+            # Categorize orders
+            move_count = sum(1 for o in orders if o.order_type.value == "move")
+            attack_count = sum(1 for o in orders if o.order_type.value == "attack")
+            defend_count = sum(1 for o in orders if o.order_type.value == "defend")
+            support_count = sum(1 for o in orders if o.order_type.value == "support")
+
+            summaries.append({
+                "turn_number": turn.turn_number,
+                "time": turn.time,
+                "phase": turn.phase,
+                "weather": turn.weather,
+                "orders_issued": len(orders),
+                "orders_breakdown": {
+                    "move": move_count,
+                    "attack": attack_count,
+                    "defend": defend_count,
+                    "support": support_count
+                },
+                "sitrep_summary": turn.sitrep_summary if hasattr(turn, 'sitrep_summary') else None
+            })
+
+        return summaries
+
+    def _generate_combat_analysis(self, db: Any, game: Any) -> Dict[str, Any]:
+        """Generate detailed combat analysis"""
+        from app.models import Unit, Turn, Order, UnitStatus
+
+        units = db.query(Unit).filter(Unit.game_id == game.id).all()
+        player_units = [u for u in units if u.side == "player"]
+        enemy_units = [u for u in units if u.side == "enemy"]
+
+        # Calculate combat effectiveness
+        player_combat_power = sum(u.strength for u in player_units if u.status != UnitStatus.DESTROYED)
+        enemy_combat_power = sum(u.strength for u in enemy_units if u.status != UnitStatus.DESTROYED)
+
+        # Analyze damage distribution
+        player_heavy_damage = len([u for u in player_units if u.status == UnitStatus.HEAVY_DAMAGE])
+        player_medium_damage = len([u for u in player_units if u.status == UnitStatus.MEDIUM_DAMAGE])
+        player_light_damage = len([u for u in player_units if u.status == UnitStatus.LIGHT_DAMAGE])
+
+        enemy_heavy_damage = len([u for u in enemy_units if u.status == UnitStatus.HEAVY_DAMAGE])
+        enemy_medium_damage = len([u for u in enemy_units if u.status == UnitStatus.MEDIUM_DAMAGE])
+        enemy_light_damage = len([u for u in enemy_units if u.status == UnitStatus.LIGHT_DAMAGE])
+
+        return {
+            "combat_power_ratio": round(player_combat_power / enemy_combat_power, 2) if enemy_combat_power > 0 else 0,
+            "player_damage_distribution": {
+                "heavy": player_heavy_damage,
+                "medium": player_medium_damage,
+                "light": player_light_damage,
+                "intact": len([u for u in player_units if u.status == UnitStatus.INTACT]),
+                "destroyed": len([u for u in player_units if u.status == UnitStatus.DESTROYED])
+            },
+            "enemy_damage_distribution": {
+                "heavy": enemy_heavy_damage,
+                "medium": enemy_medium_damage,
+                "light": enemy_light_damage,
+                "intact": len([u for u in enemy_units if u.status == UnitStatus.INTACT]),
+                "destroyed": len([u for u in enemy_units if u.status == UnitStatus.DESTROYED])
+            },
+            "combat_effectiveness": self._calculate_combat_effectiveness(
+                player_units, enemy_units
+            )
+        }
+
+    def _calculate_combat_effectiveness(
+        self,
+        player_units: List[Any],
+        enemy_units: List[Any]
+    ) -> Dict[str, Any]:
+        """Calculate combat effectiveness metrics"""
+        from app.models import UnitStatus
+
+        # Player effectiveness
+        player_destroys = len([u for u in enemy_units if u.status == UnitStatus.DESTROYED])
+        player_losses = len([u for u in player_units if u.status == UnitStatus.DESTROYED])
+
+        kill_ratio = player_destroys / player_losses if player_losses > 0 else player_destroys
+
+        # Determine effectiveness rating
+        if kill_ratio >= 3.0:
+            rating = "excellent"
+        elif kill_ratio >= 2.0:
+            rating = "good"
+        elif kill_ratio >= 1.0:
+            rating = "adequate"
+        else:
+            rating = "poor"
+
+        return {
+            "kill_ratio": round(kill_ratio, 2),
+            "rating": rating,
+            "player_units_destroyed": player_losses,
+            "enemy_units_destroyed": player_destroys
+        }
+
+    def _generate_resource_analysis(self, stats: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate resource analysis section"""
+        resources = stats["resources"]
+
+        # Determine resource crisis severity
+        total_crises = (
+            resources["ammo_depleted_units"] +
+            resources["fuel_depleted_units"] +
+            resources["readiness_degraded"]
+        )
+
+        if total_crises == 0:
+            severity = "optimal"
+        elif total_crises <= 2:
+            severity = "manageable"
+        elif total_crises <= 5:
+            severity = "concerning"
+        else:
+            severity = "critical"
+
+        return {
+            "ammo_status": {
+                "depleted": resources["ammo_depleted_units"],
+                "low": resources["ammo_low_units"],
+                "severity": "critical" if resources["ammo_depleted_units"] > 0 else "warning" if resources["ammo_low_units"] > 0 else "normal"
+            },
+            "fuel_status": {
+                "depleted": resources["fuel_depleted_units"],
+                "low": resources["fuel_low_units"],
+                "severity": "critical" if resources["fuel_depleted_units"] > 0 else "warning" if resources["fuel_low_units"] > 0 else "normal"
+            },
+            "readiness_status": {
+                "degraded": resources["readiness_degraded"],
+                "severity": "critical" if resources["readiness_degraded"] > 3 else "warning" if resources["readiness_degraded"] > 0 else "normal"
+            },
+            "overall_severity": severity
+        }
+
+    def _generate_tactical_analysis(
+        self,
+        stats: Dict[str, Any],
+        game: Any
+    ) -> Dict[str, Any]:
+        """Generate tactical analysis section"""
+        # Analyze based on available stats
+        player_casualty_rate = stats["player"]["casualty_rate"]
+        enemy_destruction_rate = stats["enemy"]["destruction_rate"]
+
+        # Determine tactical approach
+        if enemy_destruction_rate >= 50:
+            approach = "aggressive"
+        elif enemy_destruction_rate >= 30:
+            approach = "balanced"
+        else:
+            approach = "defensive"
+
+        # Determine defensive performance
+        if player_casualty_rate <= 15:
+            defensive_rating = "excellent"
+        elif player_casualty_rate <= 30:
+            defensive_rating = "good"
+        elif player_casualty_rate <= 50:
+            defensive_rating = "adequate"
+        else:
+            defensive_rating = "poor"
+
+        return {
+            "offensive_approach": approach,
+            "defensive_rating": defensive_rating,
+            "efficiency_score": round(
+                (enemy_destruction_rate / max(player_casualty_rate, 1)) * 10, 1
+            ),
+            "tactical_recommendations": self._generate_tactical_recommendations(
+                stats, approach, defensive_rating
+            )
+        }
+
+    def _generate_tactical_recommendations(
+        self,
+        stats: Dict[str, Any],
+        approach: str,
+        defensive_rating: str
+    ) -> List[str]:
+        """Generate tactical recommendations"""
+        recommendations = []
+
+        if defensive_rating == "poor":
+            recommendations.append("Improve defensive positioning and cover utilization")
+        elif defensive_rating == "adequate":
+            recommendations.append("Consider more conservative engagement distances")
+
+        if approach == "aggressive":
+            recommendations.append("Maintain aggressive pressure but watch for overextension")
+
+        resources = stats["resources"]
+        if resources["ammo_depleted_units"] > 0:
+            recommendations.append("Establish forward ammo depots for sustained operations")
+
+        if resources["fuel_depleted_units"] > 0:
+            recommendations.append("Plan fuel resupply points along advance routes")
+
+        return recommendations
+
+    def _generate_lessons_learned(
+        self,
+        stats: Dict[str, Any],
+        mission_result: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Generate structured lessons learned"""
+        lessons = []
+
+        # Analyze each aspect and create lesson entries
+        player_casualty_rate = stats["player"]["casualty_rate"]
+        enemy_destruction_rate = stats["enemy"]["destruction_rate"]
+        resources = stats["resources"]
+
+        # Casualty lesson
+        if player_casualty_rate > 30:
+            lessons.append({
+                "category": "force_protection",
+                "observation": f"Friendly casualty rate of {player_casualty_rate}% exceeds acceptable threshold",
+                "lesson": "Review tactical dispersion and fire support coordination",
+                "impact": "high"
+            })
+        elif player_casualty_rate < 15:
+            lessons.append({
+                "category": "force_protection",
+                "observation": f"Friendly casualty rate of {player_casualty_rate}% is excellent",
+                "lesson": "Continue current force protection procedures",
+                "impact": "positive"
+            })
+
+        # Enemy destruction lesson
+        if enemy_destruction_rate > 50:
+            lessons.append({
+                "category": "offensive_operations",
+                "observation": f"Destroyed {enemy_destruction_rate}% of enemy force",
+                "lesson": "Effective concentration of force achieved",
+                "impact": "positive"
+            })
+
+        # Resource lessons
+        if resources["ammo_depleted_units"] > 0:
+            lessons.append({
+                "category": "logistics",
+                "observation": f"{resources['ammo_depleted_units']} units depleted ammunition",
+                "lesson": "Supply chain requires improvement",
+                "impact": "medium"
+            })
+
+        if resources["fuel_depleted_units"] > 0:
+            lessons.append({
+                "category": "logistics",
+                "observation": f"{resources['fuel_depleted_units']} units depleted fuel",
+                "lesson": "Fuel resupply operations need better planning",
+                "impact": "medium"
+            })
+
+        return lessons
 
     def _calculate_statistics(self, db: Any, game: Any) -> Dict[str, Any]:
         """Calculate game statistics"""
