@@ -15,7 +15,42 @@
 
 ---
 
-## 🟢 新規タスク (Issues #126-128)
+## 🟢 新規タスク (Issues #126-128 + #69)
+
+### フェーズ11：緊急バグ修正
+
+- [x] Issue #126: /game 初回表示でレポート API が SitrepGenerator import 失敗し500になる `cc:完了`
+  - 概要: generate_report() が存在しない SitrepGenerator をimportしている問題を修正
+  - 対応: routes.py のimportを実際のgenerator APIへ修正（SitrepGenerator → SITREPGenerator）
+  - GitHub: #126
+
+- [x] Issue #127: /games が game_mode enum の保存値不整合で500になる `cc:完了`
+  - 概要: DBのlowercase値とenum定義の不一致でLookupError発生
+  - 対応: Enum設定にvalues_callableを追加して小文字値をサポート
+  - GitHub: #127
+
+- [x] Issue #128: デスクトップの /game 画面で raw translation key がそのまま表示される `cc:完了`
+  - 概要: translation.jsonに不足キーがあり、t()でラップされていない箇所がある
+  - 対応: game/page.tsxの固定日本語文言をt()化（遊び方/敵/味方/地形 etc.） + locale JSONに不足キー追加
+  - GitHub: #128
+
+- [x] Issue #69: Order.turn比較バグ修正 (routes.py:1537) `cc:完了`
+  - 概要: Order.turn <= target_turn でrelationship比較になりNotImplementedError発生
+  - 対応: Turn joinへ修正（Order.turn.turn_number → Turn.turn_number）
+  - 日付: 2026-03-11
+
+---
+
+## 🔴 未完了タスク
+
+### Issue #68: game_mode DB migration
+- 問題: DBに旧uppercase値 (SIMULATION, ARCADE, REPLAY) が残存の可能性
+- 対応: 必要に応じて lowercase へ ALTER TABLE
+- マーカー: `cc:TODO`
+
+---
+
+## 🟢 新規タスク (Issues #121-124)
 
 ### フェーズ11：緊急バグ修正
 

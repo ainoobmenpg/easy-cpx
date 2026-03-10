@@ -1532,9 +1532,9 @@ def generate_report(request: ReportRequest, db: Session = Depends(get_db)):
 
     # Get enemy knowledge for reports
     enemy_knowledge = {"confirmed": [], "estimated": [], "unknown": []}
-    orders = db.query(Order).filter(
+    orders = db.query(Order).join(Turn).filter(
         Order.game_id == request.game_id,
-        Order.turn <= target_turn
+        Turn.turn_number <= target_turn
     ).all()
 
     order_results = []

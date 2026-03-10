@@ -290,7 +290,9 @@
     "parseOrder": "解析",
     "submitOrder": "決定",
     "advanceTurn": "ターン進行",
-    "endGame": "ゲームを終了"
+    "endGame": "ゲームを終了",
+    "shortcuts": "ショートカット",
+    "pan": "パン"
   },
   "opord": {
     "title": "作戦計画",
