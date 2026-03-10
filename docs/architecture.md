@@ -66,7 +66,8 @@ Operational CPX is a full-stack web application with a Python backend and Next.j
 
 | Service | Responsibility |
 |---------|----------------|
-| `adjudication.py` | Core rule engine - resolves orders |
+| `adjudication.py` | Core rule engine - resolves orders (Simulation mode) |
+| `arcade_adjudication.py` | Core rule engine - 2D6 simplified combat (Arcade mode) |
 | `ai_client.py` | MiniMax M2.5 API integration |
 | `terrain.py` | Terrain effects calculation |
 | `weather_effects.py` | Weather/time modifiers |
@@ -78,26 +79,50 @@ Operational CPX is a full-stack web application with a Python backend and Next.j
 | `friction_events.py` | Random event generation |
 | `intelligence.py` | Intel accuracy simulation |
 | `escalation.py` | Escalation level management |
+| `opord_service.py` | OPORD/FRAGO management in SMESC format |
+| `inject_system.py` | MEL/MIL injection system for scenario events |
+| `rbac_service.py` | Role-Based Access Control (admin/white/blue/red/observer) |
+| `notification_service.py` | WebSocket real-time notifications |
+| `grid_system.py` | Grid-based movement and terrain management |
+| `logistics_service.py` | Supply line and logistics tracking |
+| `structured_logging.py` | Structured audit logging |
 
 ### API Routes
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/games/` | POST | Create game |
+| `/api/games/` | GET | List all games |
 | `/api/games/{game_id}` | GET | Get game by ID |
 | `/api/games/{game_id}/units` | GET | Get all units for a game |
 | `/api/games/{game_id}/units/` | POST | Create unit for a game |
 | `/api/parse-order` | POST | Parse player order (AI) |
 | `/api/orders/` | POST | Submit order |
 | `/api/advance-turn` | POST | Process turn |
+| `/api/turn/commit` | POST | Commit turn (batch orders) |
 | `/api/games/{game_id}/state` | GET | Get game state (Fog of War applied) |
 | `/api/games/{game_id}/sitrep` | GET | Get SITREP |
 | `/api/games/{game_id}/debriefing` | GET | Get game debriefing |
+| `/api/games/{game_id}/opord` | GET/POST/PUT | Get/Create/Update OPORD |
+| `/api/games/{game_id}/opord/display` | GET | Get OPORD for display |
 | `/api/games/start` | POST | Start new game with scenario |
 | `/api/games/{game_id}/end` | POST | End game |
 | `/api/units/{unit_id}/move` | POST | Move unit |
+| `/api/units/{unit_id}/reachable` | GET | Get reachable cells for unit |
 | `/api/scenarios` | GET | List scenarios |
 | `/api/scenarios/{scenario_id}` | GET | Get scenario details |
+| `/api/event/draw` | POST | Draw random event |
+| `/api/sitrep` | GET | Get global SITREP |
+| `/api/injects/{game_id}` | GET | Get active injects |
+| `/api/injects/{game_id}/trigger` | POST | Trigger inject event |
+| `/api/injects/{game_id}/cancel` | POST | Cancel inject |
+| `/api/injects/{game_id}/reset` | POST | Reset injects |
+| `/api/injects/{game_id}/effects` | GET | Get inject effects |
+| `/api/injects/{game_id}/decrement-turn` | POST | Decrement inject turn counter |
+| `/api/reports/generate` | POST | Generate report |
+| `/api/reports/{game_id}` | GET | Get game reports |
+| `/api/internal/games/{game_id}/true-state` | GET | **Internal only** - Get true state (no Fog of War) |
+| `/api/internal/games/{game_id}/units` | GET | **Internal only** - Get all units including hidden |
 
 ## Data Models
 
@@ -191,6 +216,54 @@ Intelligence is gathered through:
 - Reconnaissance units
 - Aerial observation
 - Signals intelligence
+
+## WebSocket Notifications
+
+Real-time game updates via WebSocket:
+
+```
+Client -> ws://server/ws/{game_id}
+```
+
+### Notification Types
+
+| Type | Description |
+|------|-------------|
+| `turn_advance` | Turn progressed |
+| `order_received` | New order submitted |
+| `sitrep_ready` | SITREP available |
+| `game_update` | Game state changed |
+| `chat_message` | New chat message |
+| `player_ready` | Player ready status |
+| `game_start` | Game started |
+| `game_end` | Game ended |
+
+## RBAC (Role-Based Access Control)
+
+### Roles
+
+| Role | Description |
+|------|-------------|
+| `admin` | Full system access |
+| `white` | Full game visibility (referee/umpire) |
+| `blue` | Player side (friendly) |
+| `red` | Enemy side (AI-controlled) |
+| `observer` | Spectator mode |
+
+### Role Permissions
+
+| Permission | admin | white | blue | red | observer |
+|------------|-------|-------|------|-----|----------|
+| read_own_game | Yes | Yes | Yes | Yes | Yes |
+| write_orders | Yes | Yes | Yes | Yes | No |
+| read_sitrep | Yes | Yes | Yes | Yes | Yes |
+| read_allied_units | Yes | Yes | Yes | Yes | Yes |
+| read_enemy_units | Yes | Yes | No | No | Yes |
+| read_map | Yes | Yes | Yes | Yes | Yes |
+| admin_game | Yes | Yes | No | No | No |
+| admin_system | Yes | No | No | No | No |
+
+> Note: Internal endpoints (`/api/internal/*`) provide true state without Fog of War and require `ENABLE_INTERNAL_ENDPOINTS=true`.
 
 ## State Management
 

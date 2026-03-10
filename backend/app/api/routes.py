@@ -1,5 +1,6 @@
 # Game API Routes
-from fastapi import APIRouter, Depends, HTTPException, Query, Path
+from fastapi import APIRouter, Depends, HTTPException, Query, Path, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import Literal
@@ -14,6 +15,9 @@ from app.services.scenario_manager import ScenarioManager
 from app.services.debriefing import DebriefingGenerator
 from app.services.friction_events import FrictionEventService
 from app.services.opord_service import OpordService, get_opord_service
+from app.services.logistics_service import LogisticsService, create_logistics_service
+from app.services.rate_limiter import get_rate_limiter
+from app.services.audit_logger import get_audit_logger, AuditEventType, AuditSeverity
 import asyncio
 import os
 
@@ -22,11 +26,72 @@ router = APIRouter()
 # Security: Flag for internal endpoint access
 ENABLE_INTERNAL_ENDPOINTS = os.getenv("ENABLE_INTERNAL_ENDPOINTS", "false").lower() == "true"
 
+# Rate limiter instance
+_rate_limiter = get_rate_limiter()
+_audit_logger = get_audit_logger()
+
+
+def get_client_id(request: Request) -> str:
+    """Extract client identifier from request (IP or user ID)"""
+    # Try to get user ID first if authenticated
+    if hasattr(request.state, 'user_id'):
+        return f"user:{request.state.user_id}"
+
+    # Fall back to IP address
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return f"ip:{forwarded.split(',')[0].strip()}"
+    return f"ip:{request.client.host if request.client else 'unknown'}"
+
 
 def check_internal_access():
     """Check if internal endpoints are enabled"""
     if not ENABLE_INTERNAL_ENDPOINTS:
         raise HTTPException(status_code=401, detail="Internal endpoints are disabled")
+
+
+async def rate_limit_middleware(request: Request, call_next):
+    """Rate limiting middleware"""
+    client_id = get_client_id(request)
+    endpoint = request.url.path
+
+    is_allowed, rate_info = _rate_limiter.check_rate_limit(client_id, endpoint)
+
+    if not is_allowed:
+        # Log rate limit exceeded
+        _audit_logger.log_event(
+            event_type=AuditEventType.RATE_LIMIT_EXCEEDED,
+            action="rate_limit_exceeded",
+            result="blocked",
+            severity=AuditSeverity.WARNING,
+            ip_address=request.client.host if request.client else None,
+            endpoint=endpoint,
+            method=request.method,
+            details={"client_id": client_id, "retry_after": rate_info["retry_after"]}
+        )
+
+        return JSONResponse(
+            status_code=429,
+            content={
+                "detail": "Rate limit exceeded",
+                "retry_after": rate_info["retry_after"]
+            },
+            headers={
+                "X-RateLimit-Limit": str(rate_info["limit"]),
+                "X-RateLimit-Remaining": "0",
+                "X-RateLimit-Reset": str(rate_info["reset"]),
+                "Retry-After": str(rate_info["retry_after"])
+            }
+        )
+
+    response = await call_next(request)
+
+    # Add rate limit headers to response
+    response.headers["X-RateLimit-Limit"] = str(rate_info["limit"])
+    response.headers["X-RateLimit-Remaining"] = str(rate_info["remaining"])
+    response.headers["X-RateLimit-Reset"] = str(rate_info["reset"])
+
+    return response
 
 
 # Pydantic schemas for request bodies
@@ -813,8 +878,15 @@ async def _arcade_turn_commit(request, db, game, turn):
     # Get updated game state
     game_state = arcade_engine.get_game_state(request.game_id)
 
+    # CPX-LOG: Advance logistics turn and get events
+    logistics = create_logistics_service(request.game_id)
+    logistics_events = logistics.advance_turn(game.current_turn)
+
+    # Get logistics summary for SITREP
+    logistics_summary = logistics.get_logistics_summary(game.current_turn)
+
     # For Arcade mode, generate a simple SITREP
-    sitrep = _generate_arcade_sitrep(result, game_state)
+    sitrep = _generate_arcade_sitrep(result, game_state, logistics_summary)
 
     # Save to turn
     turn = db.query(Turn).filter(
@@ -845,7 +917,7 @@ async def _arcade_turn_commit(request, db, game, turn):
     }
 
 
-def _generate_arcade_sitrep(arcade_result: dict, game_state: dict) -> str:
+def _generate_arcade_sitrep(arcade_result: dict, game_state: dict, logistics_summary: dict = None) -> str:
     """Generate a simple SITREP for Arcade mode"""
     lines = []
     lines.append(f"=== Turn {arcade_result.get('turn', '?')} SITREP ===")
@@ -898,6 +970,25 @@ def _generate_arcade_sitrep(arcade_result: dict, game_state: dict) -> str:
         lines.append("\nDestroyed:")
         for name in arcade_result["destructions"]:
             lines.append(f"  - {name}")
+
+    # CPX-LOG: Logistics section
+    if logistics_summary:
+        lines.append("\n[LOGSITREP]")
+        status = logistics_summary.get("overall_status", "unknown")
+        lines.append(f"  Supply Status: {status.upper()}")
+
+        # Routes
+        routes = logistics_summary.get("routes", [])
+        if routes:
+            lines.append("  Supply Routes:")
+            for route in routes[:3]:  # Show first 3
+                status_icon = "OK" if route.get("status") == "open" else "X"
+                lines.append(f"    [{status_icon}] {route.get('name', 'Route')}: {route.get('distance', 0)}km")
+
+        # Convoys
+        convoys = logistics_summary.get("active_convoys", [])
+        if convoys:
+            lines.append(f"  Active Convoys: {len(convoys)}")
 
     # Unit status
     units = game_state.get("units", [])
@@ -1354,4 +1445,112 @@ def decrement_effects_turn(game_id: int):
     return {
         "success": True,
         "expired_effects": expired
+    }
+
+
+# ============================================================
+# CPX-REPORTS: Report API Endpoints (Plan/Sync/Situation/Sustain)
+# ============================================================
+
+class ReportRequest(BaseModel):
+    game_id: int = Field(..., gt=0)
+    format: Literal["plan", "sync", "situation", "sustain"] = Field(..., description="Report format: plan (OPORD), sync (OPSUM), situation (SITREP/INTSUM), sustain (LOGSITREP)")
+    turn: Optional[int] = None
+    options: Optional[dict] = None
+
+
+@router.post("/reports/generate")
+def generate_report(request: ReportRequest, db: Session = Depends(get_db)):
+    """
+    Generate a military report in the specified format.
+    - plan: OPORD (SMESC) - Commander's plan
+    - sync: OPSUM - Operations synchronization
+    - situation: SITREP/INTSUM - Current situation
+    - sustain: LOGSITREP - Logistics status
+    """
+    from app.services.report_generator import get_report_generator
+    from app.services.sitrep_generator import SitrepGenerator
+
+    game = db.query(Game).filter(Game.id == request.game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    target_turn = request.turn if request.turn is not None else game.current_turn
+
+    # Get engine state
+    engine = RuleEngine(db)
+    game_state = engine.get_game_state(request.game_id)
+    game_state["turn"] = target_turn
+
+    # Get enemy knowledge for reports
+    enemy_knowledge = {"confirmed": [], "estimated": [], "unknown": []}
+    orders = db.query(Order).filter(
+        Order.game_id == request.game_id,
+        Order.turn <= target_turn
+    ).all()
+
+    order_results = []
+    for order in orders:
+        order_results.append({
+            "order_id": str(order.id),
+            "unit_name": order.unit.name if order.unit else "Unknown",
+            "order_type": order.order_type.value if order.order_type else "unknown",
+            "outcome": "success",
+            "intent": order.intent or ""
+        })
+
+    # Get sitrep generator
+    sitrep_gen = SitrepGenerator(db)
+
+    # Generate report based on format
+    report_gen = get_report_generator(sitrep_gen)
+
+    if request.format == "plan":
+        # OPORD - Commander's Plan
+        return report_gen.generate("sitrep", game_state, {"include_plan": True})
+    elif request.format == "sync":
+        # OPSUM - Operations Sync
+        return report_gen.generate("opsumm", game_state, {
+            "order_results": order_results,
+            "current_orders": [],
+            "planned_orders": []
+        })
+    elif request.format == "situation":
+        # SITREP/INTSUM - Current Situation
+        return report_gen.generate("intsumm", game_state, {
+            "enemy_knowledge": enemy_knowledge,
+            "order_results": order_results
+        })
+    elif request.format == "sustain":
+        # LOGSITREP - Logistics/Sustainment
+        return report_gen.generate("logsitrep", game_state, {})
+
+    raise HTTPException(status_code=400, detail="Invalid report format")
+
+
+@router.get("/reports/{game_id}")
+def get_reports_list(game_id: int, db: Session = Depends(get_db)):
+    """
+    Get list of available reports for a game.
+    """
+    game = db.query(Game).filter(Game.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    # Get available turns with reports
+    turns_with_reports = db.query(Turn).filter(
+        Turn.game_id == game_id,
+        Turn.sitrep.isnot(None)
+    ).all()
+
+    return {
+        "game_id": game_id,
+        "available_reports": [
+            {
+                "turn": t.turn_number,
+                "has_sitrep": bool(t.sitrep)
+            }
+            for t in turns_with_reports
+        ],
+        "current_turn": game.current_turn
     }

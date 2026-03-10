@@ -113,6 +113,10 @@ export interface Unit {
   infantry_subtype?: string;
   recon_value?: number;
   visibility_range?: number;
+  // C2: Multi-national support
+  faction?: string;      // National faction (e.g., "US", "GER", "UK", "OPFOR")
+  echelon?: string;      // Unit echelon (platoon, company, battalion, regiment, division)
+  callsign?: string;    // Radio callsign (e.g., "ALPHA", "BRAVO", "1-1")
   // Fog of War fields
   observation_confidence?: ConfidenceLevel;
   last_observed_turn?: number;

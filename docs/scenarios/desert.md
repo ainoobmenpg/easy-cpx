@@ -14,8 +14,9 @@ Desert warfare scenario - Rapid maneuver battle in open terrain. Player forces m
 - **Size**: 70x50 grid
 - **Terrain**: Open desert, wadi (dry riverbed), small oasis
 - **Weather**: Hot, clear
+- **Grid Reference**: MGRS 37S (Middle East)
 
-## Force Configuration
+## ORBAT (Order of Battle)
 
 ### Player Forces (Coalition)
 | Type | Count | Starting Position |
@@ -65,10 +66,11 @@ Desert warfare scenario - Rapid maneuver battle in open terrain. Player forces m
 
 ---
 
-## Arcade Configuration
+## Arcade Configuration (12x8)
 
 ### Map Configuration
-- **Size**: 12x8 grid
+- **Size**: 12x8 grid (condensed from 70x50)
+- **Arcade Grid Reference**: Simplified MGRS (local grid)
 - **Terrain**: Open desert, wadi (dry riverbed), small oasis
 - **Weather**: Hot, clear
 

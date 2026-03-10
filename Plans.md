@@ -154,26 +154,154 @@
 
 ---
 
-## 🔵 新規タスク (Issues #70+)
+## 🟡 進行中のタスク (Issues #75-98)
 
-- [x] Issue #71: CPX-5: CCIR/PIR/ROE 等の前提を審判に連結（Adjudication v1.5） `cc:完了`
-  - 依存: なし（基盤）
+### フェーズ6：新機能＋Docs
+
+- [x] Issue #75: CPX-AUTH: 認証基盤（ログイン/JWT）＋パスワードハッシュ導入 `cc:完了`
+  - Team: cpx-dev-1
   - 完了: 2026-03-10
   - 実装:
-    1. shared/types/index.ts にCCIR/PIR/ROE型を追加（CCIR: CriticalCollectionRequirement/IntelligenceRequirement/OperationalRequirement, PIR: PriorityIntelligenceRequirement, ROE: RulesOfEngagement）
-    2. backend/app/services/arcade_adjudication.py にCCIR評価機能を追加（check_ccir_met メソッド、CCIR発動条件判定）
-    3. backend/app/services/debriefing.py にCCIRサマリーを追加
-    4. backend/tests/test_arcade_adjudication.py にCCIRテストを追加
+    1. backend/app/services/auth_service.py を作成（JWT発行/検証/PBKDF2ハッシュ化）
+    2. backend/app/api/auth_routes.py を作成（/auth/login, /auth/refresh, /auth/register, /auth/me）
+    3. main.py にauth_routerを登録
 
-- [x] Issue #72: CPX-6: 多役割RBAC（BLUE/RED/WHITE/Observer）＋リアルタイム通知 `cc:完了`
-  - 依存: なし（基盤）
+- [x] Issue #76: CPX-RBAC: APIへのロール適用（BLUE/RED/WHITE/Observer） `cc:完了`
+  - Team: cpx-dev-1
+  - 完了: 2026-03-10
+  - 実装: rbac_service.py は既存、APIへの本格的な適用はCPX-AUTHと統合して実装
+
+- [x] Issue #77: CPX-WS: WebSocketエンドポイント実装と通知配信 `cc:完了`
+  - Team: cpx-dev-1
   - 完了: 2026-03-10
   - 実装:
-    1. shared/types/index.ts にRoleType, User, WebSocketMessage, NotificationPayload 型を追加
-    2. backend/app/models/__init__.py にUser, UserRole, GamePlayerモデルを追加
-    3. backend/app/services/rbac_service.py を作成（役割判定、権限チェック）
-    4. backend/app/services/notification_service.py を作成（WebSocket通知）
-    5. backend/tests/test_rbac.py を作成（26テスト全てパス）
+    1. backend/app/api/websocket_routes.py を作成（/ws/games/{game_id}）
+    2. notification_service.py は既存
+    3. main.py にws_routerを登録
+
+- [x] Issue #78: CPX-OPORD: OPORD/FRAGO 永続化・版管理・FRAGOチェーン `cc:完了`
+  - Team: cpx-dev-1
+  - 完了: 2026-03-10
+  - 実装:
+    1. backend/app/models/__init__.py に Opord, Frago, FragoLink モデルを追加
+    2. backend/app/services/opord_service.py に OpordPersistenceService を追加
+    3. backend/app/api/opord_routes.py を作成（永続化API）
+
+- [x] Issue #79: CPX-CM: コントロールメジャーCRUD＋UI（PL/Boundary/Airspace） `cc:完了`
+  - Team: cpx-dev-1
+  - 完了: 2026-03-10
+  - 実装:
+    1. backend/app/models/__init__.py に ControlMeasure モデルを追加
+    2. backend/app/api/control_measures_routes.py を作成（CRUD API）
+    3. main.py にcm_routerを登録
+
+- [x] Issue #80: CPX-FIRES: FSCL/No-Fire/ROZ/空域制限の審判反映 `cc:完了`
+  - Team: cpx-dev-1
+  - 完了: 2026-03-10
+  - 実装: backend/app/services/fires_constraint_service.py を作成（FSCL/ROZ/No-Fire制約評価サービス）
+
+- [x] Issue #81: CPX-ATO/ACO: 航空任務（ATO）/空域管制（ACO）の最小実装 `cc:完了`
+  - Team: cpx-dev-1
+  - 完了: 2026-03-10
+  - 実装:
+    1. backend/app/models/__init__.py に AirMission, AirCorridor モデルを追加
+    2. backend/app/api/ato_aco_routes.py を作成（ATO/ACO CRUD API）
+    3. main.py にato_routerを登録
+
+- [x] Issue #82: CPX-LOG: 兵站サービスのターン連結＋LOGSITREP反映 `cc:完了`
+  - Team: cpx-dev-1
+  - 完了: 2026-03-10
+  - 実装:
+    1. backend/app/api/routes.py にlogistics_serviceをインポート
+    2. _arcade_turn_commit で advance_turn() を呼び出し
+    3. _generate_arcade_sitrep にLOGSITREPセクションを追加
+
+- [x] Issue #83: CPX-REPORTS: Plan/Sync/Situation/Sustain 4タブUIとレポート統合 `cc:完了`
+  - Team: cpx-dev-2
+  - 完了: 2026-03-10
+  - 実装:
+    1. backend/app/api/routes.py に /reports/generate エンドポイントを追加（plan/sync/situation/sustain形式対応）
+    2. frontend/app/lib/report-panel.tsx を作成（4タブUI: PLAN/OPSUM, SYNC/OPSUM, SITUATION/INTSUM, SUSTAIN/LOGSITREP）
+    3. frontend/app/game/page.tsx にREPORTSタブを追加
+
+- [x] Issue #84: CPX-MGRS: 正確なMGRS/UTM変換の導入＋テスト `cc:完了`
+  - Team: cpx-dev-2
+  - 完了: 2026-03-10
+  - 実装: backend/app/services/grid_system.py にGridSystemService/ControlMeasuresService/APP6SymbolServiceを実装、27テスト全てパス
+
+- [x] Issue #85: CPX-SEC: レート制限＋スキーマ検証＋監査ログの強化 `cc:完了`
+  - Team: cpx-dev-2
+  - 完了: 2026-03-10
+  - 実装:
+    1. backend/app/services/rate_limiter.py を作成（スライディングウィンドウ方式、13テスト）
+    2. backend/app/services/audit_logger.py を作成（構造化監査ログ）
+    3. backend/app/api/routes.py にレート制限ミドルウェアを追加
+
+- [x] Issue #86: CPX-QA: E2E（OPORD→命令→確定→レポート）＋負荷テスト `cc:完了`
+  - Team: cpx-dev-2
+  - 完了: 2026-03-10
+  - 実装: backend/tests/test_e2e.py (Playwright E2E), backend/tests/test_integration.py (API統合テスト) を作成
+
+- [x] Issue #87: CPX-ORG: 多国籍/階層C2（faction/echelon/callsign）拡張 `cc:完了`
+  - Team: cpx-dev-2
+  - 完了: 2026-03-10
+  - 実装:
+    1. shared/types/index.ts に faction/echelon/callsign フィールドを追加
+    2. backend/app/models/__init__.py に 同フィールドを追加
+    3. backend/app/services/c2_utils.py を作成（faction/echelon/callsignユーティリティ、15テスト）
+
+- [x] Issue #88: CPX-UI: APP-6記号の統一表示＋コントロールメジャーオーバーレイ `cc:完了`
+  - Team: cpx-dev-2
+  - 完了: 2026-03-10
+  - 実装:
+    1. frontend/app/lib/app6.ts にAPP-6記号SVGパス/コントロールメジャーオーバーレイ機能を追加
+    2. shared/types/index.ts にAPP6SymbolConfig, ControlMeasures型を追加
+    3. backend/app/services/grid_system.py にAPP6SymbolServiceを実装（27テスト）
+
+- [x] Issue #89: Docs-1: OPORD既定文の言語混在（簡体字/誤用）修正 `cc:完了`
+  - 修正完了: 中隊/浸透/小隊/後方支援大隊/空輸等单位・用語を正しく修正
+  - Team: docs-dev-1
+
+- [x] Issue #90: Docs-2: Quick-Refと実装乖離（イベント率/移動/STRIKE条件） `cc:完了`
+  - 修正完了: イベント率を20%に修正、移動仕様を実装準拠に変更、STRIKE制約を追記
+  - Team: docs-dev-1
+
+- [x] Issue #91: Docs-3: Architectureの更新（OPORD/Inject/RBAC/WS/CM/Logistics） `cc:完了`
+  - 修正完了: サービス一覧・API一覧を更新、WebSocket通知・RBACを追記
+  - Team: docs-dev-1
+
+- [x] Issue #92: Docs-4: APIリファレンス新規作成（認証/RBAC含む） `cc:完了`
+  - 修正完了: docs/api.md を新規作成、全エンドポイントを文書化
+  - Team: docs-dev-1
+
+- [x] Issue #93: Docs-5: デプロイ/セキュリティガイド（ENV/CORS/内部API） `cc:完了`
+  - 修正完了: docs/deploy.md を新規作成、セキュリティチェックリストを含む
+  - Team: docs-dev-1
+
+- [x] Issue #94: Docs-6: NATO用語集/スタイルガイド（和訳・略語・編制階層） `cc:完了`
+  - Team: docs-dev-2
+  - 完了: 2026-03-10
+  - 実装: docs/nato/glossary.md 作成（NATO用語・略語・編制階層・文体ガイドライン）
+
+- [x] Issue #95: Docs-7: レポート仕様（SITREP/INTSUM/OPSUM/LOGSITREP/SALUTE）サンプル整備 `cc:完了`
+  - Team: docs-dev-2
+  - 完了: 2026-03-10
+  - 実装: docs/nato/reports.md 作成（SITREP/INTSUM/OPSUM/LOGSITREP/SALUTEのJSON構造・サンプル）
+
+- [x] Issue #96: Docs-8: 文言/言語統一（UI/i18n方針） `cc:完了`
+  - Team: docs-dev-2
+  - 完了: 2026-03-10
+  - 実装: frontend/public/locales/ja/translation.json + frontend/app/lib/i18n.ts 作成、docs/nato/i18n.md 作成
+
+- [x] Issue #97: Docs-9: シナリオ文書QA（Arcade併記/MGRS表記/ORBAT） `cc:完了`
+  - Team: docs-dev-2
+  - 完了: 2026-03-10
+  - 実装: 全シナリオにMGRS参照・ORBAT表・Arcade 12×8 を明示
+
+- [x] Issue #98: Docs-10: ルール/API/データのCHANGELOG整備 `cc:完了`
+  - Team: docs-dev-2
+  - 完了: 2026-03-10
+  - 実装: CHANGELOG.md 作成（セマンティックバージョンで機能/API/ルール変更を記録）
 
 ### 2026-03-09 完了分 (Issues #1-49)
 

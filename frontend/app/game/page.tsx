@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback, memo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import API from '../lib/api';
+import ReportPanel from '../lib/report-panel';
 import type { Unit, GameState, Sitrep, TurnLog } from '@shared/types';
 
 // Memoized Unit component for performance
@@ -139,7 +140,7 @@ function GameContent() {
   const [showLegend, setShowLegend] = useState(false);
   const [battleOdds, setBattleOdds] = useState<{ attacker: string; defender: string; odds: string; details: string } | null>(null);
   const [gameMode, setGameMode] = useState<'classic' | 'arcade'>('classic'); // Game mode: classic (text) or arcade (buttons)
-  const [activeTab, setActiveTab] = useState<'info' | 'logs' | 'history' | 'opord'>('info'); // Right sidebar tab
+  const [activeTab, setActiveTab] = useState<'info' | 'logs' | 'history' | 'opord' | 'reports'>('info'); // Right sidebar tab
   // OPORD state for SMESC editor
   const [opordData, setOpordData] = useState<any>(null);
   const [opordLoading, setOpordLoading] = useState(false);
@@ -929,6 +930,7 @@ function GameContent() {
             <button onClick={() => setActiveTab('history')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'history' ? 'text-blue-300 border-blue-500 bg-blue-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>履歴</button>
             <button onClick={() => setActiveTab('logs')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'logs' ? 'text-blue-300 border-blue-500 bg-blue-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>ログ</button>
             <button onClick={() => { setActiveTab('opord'); fetchOpord(); }} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'opord' ? 'text-green-300 border-green-500 bg-green-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>OPORD</button>
+            <button onClick={() => setActiveTab('reports')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'reports' ? 'text-yellow-300 border-yellow-500 bg-yellow-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>REPORTS</button>
           </div>
 
           {/* SITREP Card - shown on info tab */}
@@ -1164,6 +1166,13 @@ function GameContent() {
               ) : (
                 <p className="text-gray-500 text-xs">OPORDがありません。「編集」ボタンで作成してください。</p>
               )}
+            </div>
+          )}
+
+          {/* Reports Tab - CPX-REPORTS */}
+          {activeTab === 'reports' && gameId && (
+            <div className="flex-1 overflow-y-auto">
+              <ReportPanel gameId={gameId} turn={gameState?.turn || 1} />
             </div>
           )}
 

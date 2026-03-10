@@ -57,17 +57,19 @@ Roll 2D6 for both sides, then calculate the difference.
 | DEFEND | `O` | Hold position | +2 DEF until next turn |
 | RECON | `?` | Gather intel | Reveal adjacent cells |
 | SUPPLY | `+` | Request logistics | Restore supply status |
-| STRIKE | `*` | Heavy attack | +2 ATK, -1 DEF (this turn) |
+| STRIKE | `*` | Heavy attack | +2 ATK, -1 DEF (this turn), requires adjacent enemy, 3 uses per game, cannot attack next turn |
 
 ## Terrain Movement
 
-| Terrain | Cells/Turn |
-|---------|------------|
-| Plain | 4 |
-| Forest | 2 |
-| Urban | 2 |
-| Mountain | 1 |
-| Water | 0 (impassable) |
+Movement is calculated as: `Unit MOVE stat / Terrain Cost (Manhattan distance)`
+
+| Terrain | Cost | INF (MOVE=2) | ARM (MOVE=3) | ART (MOVE=2) |
+|---------|------|--------------|--------------|--------------|
+| Plain | 1 | 2 cells | 3 cells | 2 cells |
+| Forest | 2 | 1 cell | 1 cell | 1 cell |
+| Urban | 2 | 1 cell | 1 cell | 1 cell |
+| Mountain | 4 | 0 cells | 0 cells | 0 cells |
+| Water | 999 | impassable | impassable | impassable |
 
 ## Turn Flow
 
@@ -75,7 +77,7 @@ Roll 2D6 for both sides, then calculate the difference.
 2. Resolve MOVE orders
 3. Resolve ATTACK/STRIKE orders
 4. Apply damage (remove destroyed units)
-5. Event deck draw (40% chance)
+5. Event deck draw (20% chance)
 6. Generate SITREP
 7. Next turn
 
@@ -89,7 +91,7 @@ Roll 2D6 for both sides, then calculate the difference.
 
 ## Event Deck (10 Cards)
 
-Drawn with 40% chance per turn (after turn 2).
+Drawn with 20% chance per turn (after turn 2).
 
 | Event | Effect | Rarity |
 |-------|--------|--------|

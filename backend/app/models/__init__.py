@@ -320,6 +320,11 @@ class Unit(Base):
     interceptors = Column(Integer, default=0)  # Air defense missiles
     precision_munitions = Column(Integer, default=0)  # Guided munitions
 
+    # C2: Multi-national support fields
+    faction = Column(String, nullable=True)  # National faction (US, GER, UK, OPFOR)
+    echelon = Column(String, nullable=True)  # Unit echelon (platoon, company, battalion)
+    callsign = Column(String, nullable=True)  # Radio callsign (ALPHA, BRAVO, 1-1)
+
     game = relationship("Game", back_populates="units")
     orders = relationship("Order", back_populates="unit", cascade="all, delete-orphan")  # 1:N for turn history
     player_knowledge = relationship("PlayerKnowledge", back_populates="unit", viewonly=True)
@@ -691,4 +696,224 @@ class GamePlayer(Base):
     joined_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
+    game = relationship("Game")
+
+
+# =============================================================================
+# CPX-OPORD: OPORD/FRAGO Persistence Models
+# =============================================================================
+
+class Opord(Base):
+    """OPORD (Operations Order) - Versioned"""
+    __tablename__ = "opords"
+
+    id = Column(Integer, primary_key=True, index=True)
+    game_id = Column(Integer, ForeignKey("games.id"))
+    version = Column(Integer, default=1)
+    status = Column(String, default="draft")  # draft, issued, superseded, archived
+
+    # SMESC sections as JSON
+    situation = Column(JSON)  # Situation data
+    mission = Column(JSON)   # Mission data
+    execution = Column(JSON) # Execution data
+    coordination = Column(JSON) # Coordination data
+    service_support = Column(JSON) # Service support data
+    command_signal = Column(JSON) # Command and signal data
+
+    # Metadata
+    issued_by = Column(String, nullable=True)  # Username
+    issued_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Chain
+    superseded_by_id = Column(Integer, ForeignKey("opords.id"), nullable=True)
+    previous_version_id = Column(Integer, ForeignKey("opords.id"), nullable=True)
+
+    game = relationship("Game")
+    supersedes = relationship("Opord", remote_side=[id], foreign_keys=[superseded_by_id])
+    previous_version = relationship("Opord", remote_side=[id], foreign_keys=[previous_version_id])
+    fragos = relationship("Frago", back_populates="opord")
+
+
+class Frago(Base):
+    """FRAGO (Fragmentary Order) - Quick changes to OPORD"""
+    __tablename__ = "fragos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    opord_id = Column(Integer, ForeignKey("opords.id"))
+    game_id = Column(Integer, ForeignKey("games.id"))
+    version = Column(Integer, default=1)
+    frago_number = Column(String, nullable=False)  # e.g., "FRAGO-001"
+    status = Column(String, default="draft")  # draft, issued, superseded, archived
+
+    # Change data (partial update)
+    changes = Column(JSON)  # Dict of changed fields
+    summary = Column(Text, nullable=True)  # Brief summary of changes
+
+    # Metadata
+    issued_by = Column(String, nullable=True)
+    issued_at = Column(DateTime, nullable=True)
+    effective_time = Column(String, nullable=True)  # When changes take effect
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Chain
+    superseded_by_id = Column(Integer, ForeignKey("fragos.id"), nullable=True)
+
+    game = relationship("Game")
+    opord = relationship("Opord", back_populates="fragos")
+    supersedes = relationship("Frago", remote_side=[id], foreign_keys=[superseded_by_id])
+
+
+class FragoLink(Base):
+    """Links FRAGOs in a chain"""
+    __tablename__ = "frago_links"
+
+    id = Column(Integer, primary_key=True, index=True)
+    game_id = Column(Integer, ForeignKey("games.id"))
+    chain_name = Column(String, nullable=False)  # e.g., "alpha-company"
+    order_index = Column(Integer, nullable=False)  # 0 = original OPORD, 1 = FRAGO-001, etc.
+
+    opord_id = Column(Integer, ForeignKey("opords.id"), nullable=True)
+    frago_id = Column(Integer, ForeignKey("fragos.id"), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    game = relationship("Game")
+    opord = relationship("Opord")
+    frago = relationship("Frago")
+
+
+# =============================================================================
+# CPX-CM: Control Measures (PL/Boundary/Airspace) Models
+# =============================================================================
+
+class ControlMeasureType(enum.Enum):
+    PHASE_LINE = "phase_line"
+    BOUNDARY = "boundary"
+    AIRSPACE = "airspace"
+
+
+class ControlMeasure(Base):
+    """Generic control measure (Phase Line, Boundary, Airspace)"""
+    __tablename__ = "control_measures"
+
+    id = Column(Integer, primary_key=True, index=True)
+    game_id = Column(Integer, ForeignKey("games.id"))
+
+    # Control measure type
+    measure_type = Column(String, nullable=False)  # phase_line, boundary, airspace
+
+    # Identification
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+
+    # Geometry - stored as JSON list of [x, y] coordinates
+    points = Column(JSON, nullable=False)  # [[x1, y1], [x2, y2], ...]
+
+    # Styling
+    color = Column(String, default="#ff0000")
+    line_style = Column(String, default="solid")  # solid, dashed, dotted
+
+    # Type-specific data
+    owning_side = Column(String, nullable=True)  # For boundary: player, enemy, neutral
+    airspace_type = Column(String, nullable=True)  # For airspace: air_corridor, restricted, ada_zone, no_fly
+    altitude_low = Column(Integer, nullable=True)  # For airspace (feet)
+    altitude_high = Column(Integer, nullable=True)  # For airspace (feet)
+    status = Column(String, default="active")  # For phase_line: reported, contact, lost
+
+    # Metadata
+    created_by = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    game = relationship("Game")
+
+
+# =============================================================================
+# CPX-ATO/ACO: Air Mission (ATO) and Air Control (ACO) Models
+# =============================================================================
+
+class AirMissionType(enum.Enum):
+    CAS = "cas"      # Close Air Support
+    BAI = "bai"      # Battlefield Air Interdiction
+    SEAD = "sead"    # Suppression of Enemy Air Defense
+    ISR = "isr"      # Intelligence, Surveillance, Reconnaissance
+    AIRLIFT = "airlift"
+    RECON = "recon"
+
+
+class AirMissionStatus(enum.Enum):
+    PLANNED = "planned"
+    BRIEFED = "briefed"
+    SORTIED = "sortied"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    FAILED = "failed"
+
+
+class AirMission(Base):
+    """Air Mission (ATO entry)"""
+    __tablename__ = "air_missions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    game_id = Column(Integer, ForeignKey("games.id"))
+
+    # Mission identification
+    mission_number = Column(String, nullable=False)  # e.g., "CAS-01"
+    mission_type = Column(String, nullable=False)  # cas, bai, sead, isr, airlift
+
+    # Timing
+    scheduled_turn = Column(Integer, nullable=False)
+    tot = Column(String, nullable=True)  # Time on Target (e.g., "0800")
+
+    # Package composition
+    aircraft_type = Column(String, nullable=True)  # e.g., "F-16", "A-10"
+    aircraft_count = Column(Integer, default=1)
+
+    # Target
+    target_x = Column(Float, nullable=True)
+    target_y = Column(Float, nullable=True)
+    target_description = Column(String, nullable=True)
+
+    # Status
+    status = Column(String, default="planned")  # planned, briefed, sortied, completed, cancelled, failed
+
+    # Results (filled after execution)
+    results = Column(JSON, nullable=True)
+
+    # Metadata
+    created_by = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    game = relationship("Game")
+
+
+class AirCorridor(Base):
+    """Air Corridor for ACO (Air Control Order)"""
+    __tablename__ = "air_corridors"
+
+    id = Column(Integer, primary_key=True, index=True)
+    game_id = Column(Integer, ForeignKey("games.id"))
+
+    # Corridor identification
+    name = Column(String, nullable=False)  # e.g., "CORRIDOR RED"
+    corridor_type = Column(String, default="transit")  # transit, approach, departure
+
+    # Geometry - center line
+    waypoints = Column(JSON, nullable=False)  # List of [x, y] points
+
+    # Altitude constraints
+    altitude_min = Column(Integer, nullable=True)  # feet AGL
+    altitude_max = Column(Integer, nullable=True)  # feet AGL
+
+    # Status
+    status = Column(String, default="active")  # active, suspended, closed
+
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
     game = relationship("Game")

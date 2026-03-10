@@ -14,8 +14,9 @@ Cold War scenario based on the Fulda Gap - a potential Soviet invasion route thr
 - **Size**: 50x40 grid
 - **Terrain**: Central European highlands, forest, river crossing
 - **Weather**: Clear (spring)
+- **Grid Reference**: MGRS 34T (Central Europe)
 
-## Force Configuration
+## ORBAT (Order of Battle)
 
 ### Player Forces (NATO)
 | Type | Count | Starting Position |
@@ -63,10 +64,11 @@ Cold War scenario based on the Fulda Gap - a potential Soviet invasion route thr
 
 ---
 
-## Arcade Configuration
+## Arcade Configuration (12x8)
 
 ### Map Configuration
-- **Size**: 12x8 grid
+- **Size**: 12x8 grid (condensed from 50x40)
+- **Arcade Grid Reference**: Simplified MGRS (local grid)
 - **Terrain**: Central European highlands, forest, river crossing
 - **Weather**: Clear (spring)
 

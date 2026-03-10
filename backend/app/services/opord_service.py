@@ -146,11 +146,11 @@ class OpordService:
                 friendly_situation="自軍主力は南部地域に展開中。増援部隊が参入予定。",
                 terrain_impact="山林地帯が視界を制限し、機甲部隊の機動を制約。",
                 weather_impact="視界不良による偵察効率低下懸念。降水により機動路が制限される可能性。",
-                attachments=["第3機甲旅団", "直射火力中队"],
+                attachments=["第3機甲旅団", "直射火力中隊"],
                 detachments=[]
             ),
             mission=OpordMissionData(
-                task="敵渗透部隊を撃破し、国境地域の安全を確立する",
+                task="敵浸透部隊を撃破し、国境地域の安全を確立する",
                 purpose="北部国境の主導権を回復し、後方の安全を確保する",
                 end_state="敵主力部隊が撃破され、国境線が確保される",
                 success_criteria=[
@@ -195,14 +195,14 @@ class OpordService:
                 supply=OpordSupplyData(
                     ammo="前方弾薬集積所（FAP）に3日分保有",
                     fuel="現地調達可能、予備燃料16000ℓ",
-                    other="的一般補給は後方より"
+                    other="一般補給は後方より"
                 ),
                 maintenance="前方整備班（1個小隊）随伴",
-                medical="衛生班（1個分身）随伴、後送は戦場病院へ",
-                transportation="輸送中队（10トン車5両）随伴",
-                evacuation="負傷者は後方医院へ空送",
+                medical="衛生班（1個小隊）随伴、後送は戦場病院へ",
+                transportation="輸送中隊（10トン車5両）随伴",
+                evacuation="負傷者は後方病院へ空輸",
                 field_services="糧秣は1日分携行",
-                general_supply="後方支援大队より補給受領"
+                general_supply="後方支援大隊より補給受領"
             ),
             created_at=now,
             updated_at=now
@@ -489,3 +489,174 @@ _opord_service = OpordService()
 def get_opord_service() -> OpordService:
     """Get the global OPORD service"""
     return _opord_service
+
+
+# =============================================================================
+# Database Persistence Methods for OPORD/FRAGO
+# =============================================================================
+
+def _dataclass_to_dict(obj) -> dict:
+    """Convert a dataclass to a dictionary"""
+    if obj is None:
+        return {}
+    if hasattr(obj, '__dataclassfields__'):
+        result = {}
+        for field in obj.__dataclassfields__.keys():
+            value = getattr(obj, field, None)
+            if value is not None:
+                if hasattr(value, '__dataclassfields__'):
+                    result[field] = _dataclass_to_dict(value)
+                elif isinstance(value, list):
+                    result[field] = [
+                        _dataclass_to_dict(v) if hasattr(v, '__dataclassfields__') else v
+                        for v in value
+                    ]
+                else:
+                    result[field] = value
+        return result
+    return {}
+
+
+def _dict_to_dataclass(cls, data: dict):
+    """Create a dataclass from a dictionary"""
+    if not data:
+        return None
+    # Filter to only known fields
+    if hasattr(cls, '__dataclassfields__'):
+        filtered = {k: v for k, v in data.items() if k in cls.__dataclassfields__}
+        return cls(**filtered)
+    return None
+
+
+class OpordPersistenceService:
+    """Service for persisting OPORD/FRAGO to database"""
+
+    def __init__(self, db):
+        self.db = db
+
+    def save_opord(self, opord: OPORDData, status: str = "draft") -> "Opord":
+        """Save an OPORD to the database"""
+        from app.models import Opord
+
+        # Convert dataclasses to dicts for JSON storage
+        opord_record = Opord(
+            game_id=opord.game_id,
+            status=status,
+            situation=_dataclass_to_dict(opord.situation),
+            mission=_dataclass_to_dict(opord.mission),
+            execution=_dataclass_to_dict(opord.execution),
+            coordination=_dataclass_to_dict(opord.coordination),
+            service_support=_dataclass_to_dict(opord.service_support),
+            command_signal=_dataclass_to_dict(opord.execution) if opord.execution else {},
+            issued_by=opord.created_by
+        )
+
+        self.db.add(opord_record)
+        self.db.commit()
+        self.db.refresh(opord_record)
+        return opord_record
+
+    def load_opord(self, game_id: int) -> Optional[OPORDData]:
+        """Load the latest OPORD for a game"""
+        from app.models import Opord
+
+        opord_record = self.db.query(Opord).filter(
+            Opord.game_id == game_id
+        ).order_by(Opord.version.desc()).first()
+
+        if not opord_record:
+            return None
+
+        return self._record_to_opord_data(opord_record)
+
+    def _record_to_opord_data(self, record: "Opord") -> OPORDData:
+        """Convert database record to OPORDData"""
+        return OPORDData(
+            opord_id=str(record.id),
+            game_id=record.game_id,
+            title=f"OPORD v{record.version}",
+            situation=_dict_to_dataclass(OpordSituationData, record.situation) or OpordSituationData(),
+            mission=_dict_to_dataclass(OpordMissionData, record.mission) or OpordMissionData(),
+            execution=_dict_to_dataclass(OpordExecutionData, record.execution) or OpordExecutionData(),
+            coordination=_dict_to_dataclass(OpordCoordinationData, record.coordination) or OpordCoordinationData(),
+            service_support=_dict_to_dataclass(OpordServiceSupportData, record.service_support) or OpordServiceSupportData(),
+            created_at=record.created_at.isoformat() if record.created_at else "",
+            updated_at=record.updated_at.isoformat() if record.updated_at else "",
+            created_by=record.issued_by
+        )
+
+    def get_opord_versions(self, game_id: int) -> list[dict]:
+        """Get all versions of OPORD for a game"""
+        from app.models import Opord
+
+        records = self.db.query(Opord).filter(
+            Opord.game_id == game_id
+        ).order_by(Opord.version.desc()).all()
+
+        return [
+            {
+                "id": r.id,
+                "version": r.version,
+                "status": r.status,
+                "issued_by": r.issued_by,
+                "issued_at": r.issued_at.isoformat() if r.issued_at else None,
+                "created_at": r.created_at.isoformat() if r.created_at else None
+            }
+            for r in records
+        ]
+
+    def save_frago(self, opord_id: int, game_id: int, frago_number: str,
+                   changes: dict, summary: str, issued_by: str) -> "Frago":
+        """Save a FRAGO to the database"""
+        from app.models import Frago
+
+        # Get frago count for version
+        frago_count = self.db.query(Frago).filter(Frago.opord_id == opord_id).count()
+
+        frago_record = Frago(
+            opord_id=opord_id,
+            game_id=game_id,
+            frago_number=frago_number,
+            version=frago_count + 1,
+            changes=changes,
+            summary=summary,
+            issued_by=issued_by,
+            status="issued"
+        )
+
+        self.db.add(frago_record)
+        self.db.commit()
+        self.db.refresh(frago_record)
+        return frago_record
+
+    def get_frago_chain(self, game_id: int, chain_name: str = None) -> list[dict]:
+        """Get FRAGO chain for a game"""
+        from app.models import FragoLink, Opord, Frago
+
+        query = self.db.query(FragoLink).filter(FragoLink.game_id == game_id)
+        if chain_name:
+            query = query.filter(FragoLink.chain_name == chain_name)
+
+        links = query.order_by(FragoLink.order_index).all()
+
+        result = []
+        for link in links:
+            item = {
+                "order_index": link.order_index,
+                "type": "opord" if link.opord_id else "frago",
+                "id": link.opord_id or link.frago_id
+            }
+            if link.opord_id:
+                opord = self.db.query(Opord).filter(Opord.id == link.opord_id).first()
+                if opord:
+                    item["version"] = opord.version
+                    item["status"] = opord.status
+            elif link.frago_id:
+                frago = self.db.query(Frago).filter(Frago.id == link.frago_id).first()
+                if frago:
+                    item["frago_number"] = frago.frago_number
+                    item["version"] = frago.version
+                    item["status"] = frago.status
+            result.append(item)
+
+        return result

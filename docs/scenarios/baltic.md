@@ -14,8 +14,9 @@ Baltic Sea coast operations - NATO forces must secure a coastal corridor while e
 - **Size**: 60x50 grid
 - **Terrain**: Coastal plains, marshland, urban area (coastal town)
 - **Weather**: Overcast (spring)
+- **Grid Reference**: MGRS 34T (Baltic Coast)
 
-## Force Configuration
+## ORBAT (Order of Battle)
 
 ### Player Forces (NATO)
 | Type | Count | Starting Position |
@@ -64,10 +65,11 @@ Baltic Sea coast operations - NATO forces must secure a coastal corridor while e
 
 ---
 
-## Arcade Configuration
+## Arcade Configuration (12x8)
 
 ### Map Configuration
-- **Size**: 12x8 grid
+- **Size**: 12x8 grid (condensed from 60x50)
+- **Arcade Grid Reference**: Simplified MGRS (local grid)
 - **Terrain**: Coastal plains, marshland, urban area (coastal town)
 - **Weather**: Overcast (spring)
 

@@ -1,0 +1,93 @@
+{
+  "common": {
+    "retry": "再試行",
+    "gameTitle": "作戦級CPX",
+    "gameList": "ゲーム一覧",
+    "help": "ヘルプ",
+    "display": "表示",
+    "guide": "ガイド",
+    "zoomIn": "マップをzoom in",
+    "zoomOut": "マップをzoom out",
+    "zoomReset": "リセット",
+    "fowDebug": "FoWデバッグ",
+    "legend": "凡例"
+  },
+  "tabs": {
+    "info": "情報",
+    "history": "履歴",
+    "logs": "ログ",
+    "opord": "OPORD",
+    "reports": "レポート"
+  },
+  "commands": {
+    "move": "移動",
+    "attack": "攻撃",
+    "defend": "防御",
+    "recon": "偵察",
+    "supply": "補給",
+    "strike": "Strikes",
+    "clear": "クリア",
+    "submit": "決定",
+    "parse": "解析",
+    "advanceTurn": "ターン進行",
+    "endGame": "ゲームを終了",
+    "orderInput": "命令を入力 (例: A小隊、東へ移動)",
+    "parsedOrder": "解析結果",
+    "batchOrders": "一括命令"
+  },
+  "unitTypes": {
+    "INFANTRY": "歩兵",
+    "ARMOR": "戦車",
+    "ARTILLERY": "砲兵",
+    "AIR_DEFENSE": "防空",
+    "RECON": "偵察",
+    "SUPPORT": "支援"
+  },
+  "terrain": {
+    "plain": "平野",
+    "forest": "森林",
+    "urban": "都市",
+    "mountain": "山地",
+    "water": "水域"
+  },
+  "status": {
+    "intact": "無傷",
+    "lightDamage": "軽損",
+    "moderateDamage": "中損",
+    "heavyDamage": "大損",
+    "destroyed": "撃破",
+    "full": "充足",
+    "depleted": "低下",
+    "exhausted": "枯渇"
+  },
+  "confidence": {
+    "confirmed": "確認済み",
+    "estimated": "推定",
+    "suspected": "疑念",
+    "unknown": "不明"
+  },
+  "report": {
+    "sitrep": "戦況報告",
+    "intsumm": "情報要約",
+    "opsum": "作戦要約",
+    "logsitrep": "兵站報告",
+    "salute": "敵情報報告",
+    "noReports": "レポートなし",
+    "commanderOrder": "上官命令"
+  },
+  "gameMode": {
+    "classic": "Classic",
+    "arcade": "Arcade"
+  },
+  "victory": {
+    "majorVictory": "大勝利",
+    "minorVictory": "小勝利",
+    "draw": "引分",
+    "defeat": "敗北"
+  },
+  "turn": "ターン",
+  "score": "スコア",
+  "player": "プレイヤー",
+  "enemy": "敵軍",
+  "strikesRemaining": "残Strikes"
+}

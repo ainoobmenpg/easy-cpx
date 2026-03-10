@@ -136,3 +136,120 @@ export function formatMGRS(x: number, y: number, precision: '1km' | '10km' | '10
     return `${gridZone} ${eastingStr} ${northingStr}`;
   }
 }
+
+// ============================================================
+// Control Measures Overlay Types
+// ============================================================
+
+export interface ControlMeasurePoint {
+  x: number;
+  y: number;
+}
+
+export interface PhaseLine {
+  id: string;
+  name: string;
+  points: ControlMeasurePoint[];
+  color: string;
+  lineStyle: 'solid' | 'dashed' | 'dotted';
+  status: 'reported' | 'contact' | 'lost';
+}
+
+export interface Boundary {
+  id: string;
+  name: string;
+  owningSide: 'player' | 'enemy' | 'neutral';
+  points: ControlMeasurePoint[];
+  color: string;
+  lineStyle: 'solid' | 'dashed';
+}
+
+export interface Airspace {
+  id: string;
+  name: string;
+  type: 'air_corridor' | 'restricted' | 'ada_zone' | 'no_fly';
+  points: ControlMeasurePoint[];
+  altitudeLow?: number;
+  altitudeHigh?: number;
+  color: string;
+  status: 'active' | 'inactive';
+}
+
+// Control measure colors
+export const CONTROL_MEASURE_COLORS = {
+  phaseLine: {
+    reported: '#22c55e', // Green
+    contact: '#f59e0b',  // Amber
+    lost: '#ef4444',     // Red
+  },
+  boundary: {
+    player: '#3b82f6',   // Blue
+    enemy: '#ef4444',     // Red
+    neutral: '#22c55e',  // Green
+  },
+  airspace: {
+    air_corridor: '#06b6d4',  // Cyan
+    restricted: '#f59e0b',     // Amber
+    ada_zone: '#ef4444',       // Red
+    no_fly: '#8b5cf6',        // Purple
+  },
+};
+
+// Generate SVG path for phase line
+export function getPhaseLinePath(points: ControlMeasurePoint[]): string {
+  if (points.length < 2) return '';
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length; i++) {
+    path += ` L ${points[i].x} ${points[i].y}`;
+  }
+  return path;
+}
+
+// Generate SVG path for boundary (closed polygon)
+export function getBoundaryPath(points: ControlMeasurePoint[]): string {
+  if (points.length < 2) return '';
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length; i++) {
+    path += ` L ${points[i].x} ${points[i].y}`;
+  }
+  path += ' Z'; // Close the polygon
+  return path;
+}
+
+// Generate SVG path for airspace (rectangle or polygon)
+export function getAirspacePath(points: ControlMeasurePoint[]): string {
+  if (points.length < 2) return '';
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length; i++) {
+    path += ` L ${points[i].x} ${points[i].y}`;
+  }
+  path += ' Z';
+  return path;
+}
+
+// Get dash array for control measure line style
+export function getControlMeasureDashArray(lineStyle: 'solid' | 'dashed' | 'dotted'): string {
+  switch (lineStyle) {
+    case 'dashed':
+      return '0.3,0.2';
+    case 'dotted':
+      return '0.1,0.1';
+    default:
+      return '';
+  }
+}
+
+// Generate legend items for control measures
+export function getControlMeasureLegend(): { label: string; color: string; type: string }[] {
+  return [
+    { label: 'Phase Line (Reported)', color: CONTROL_MEASURE_COLORS.phaseLine.reported, type: 'phase' },
+    { label: 'Phase Line (Contact)', color: CONTROL_MEASURE_COLORS.phaseLine.contact, type: 'phase' },
+    { label: 'Phase Line (Lost)', color: CONTROL_MEASURE_COLORS.phaseLine.lost, type: 'phase' },
+    { label: 'Boundary (Friendly)', color: CONTROL_MEASURE_COLORS.boundary.player, type: 'boundary' },
+    { label: 'Boundary (Enemy)', color: CONTROL_MEASURE_COLORS.boundary.enemy, type: 'boundary' },
+    { label: 'Air Corridor', color: CONTROL_MEASURE_COLORS.airspace.air_corridor, type: 'airspace' },
+    { label: 'Restricted Area', color: CONTROL_MEASURE_COLORS.airspace.restricted, type: 'airspace' },
+    { label: 'ADA Zone', color: CONTROL_MEASURE_COLORS.airspace.ada_zone, type: 'airspace' },
+    { label: 'No-Fly Zone', color: CONTROL_MEASURE_COLORS.airspace.no_fly, type: 'airspace' },
+  ];
+}
