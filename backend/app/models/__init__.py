@@ -252,7 +252,7 @@ class Game(Base):
     phase = Column(String, default="orders")  # orders, adjudication, sitrep
     is_active = Column(Boolean, default=True)
     scenario_id = Column(String, nullable=True)  # Scenario ID for this game
-    game_mode = Column(Enum(GameMode), default=GameMode.SIMULATION)  # simulation or arcade
+    game_mode = Column(Enum(GameMode, values_callable=lambda e: [m.value for m in e]), default=GameMode.SIMULATION)  # simulation or arcade
 
     # Terrain data - stored as JSON to persist across turns
     terrain_data = Column(JSON, nullable=True)

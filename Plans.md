@@ -4,6 +4,38 @@
 
 ---
 
+## 🟢 新規タスク (Issues #125)
+
+### フェーズ10：緊急バグ修正
+
+- [x] Issue #125: connection-indicator の next-i18next import で /scenarios などが500になる `cc:完了`
+  - 概要: connection-indicator.tsx が未依存の next-i18next をimportしている問題を修正
+  - 対応: useI18n() ベースへ揃えた（useTranslation → useI18n）
+  - GitHub: #125
+
+---
+
+## 🟢 新規タスク (Issues #126-128)
+
+### フェーズ11：緊急バグ修正
+
+- [x] Issue #126: /game 初回表示でレポート API が SitrepGenerator import 失敗し500になる `cc:完了`
+  - 概要: generate_report() が存在しない SitrepGenerator をimportしている問題を修正
+  - 対応: routes.py のimportを実際のgenerator APIへ修正（SitrepGenerator → SITREPGenerator）
+  - GitHub: #126
+
+- [x] Issue #127: /games が game_mode enum の保存値不整合で500になる `cc:完了`
+  - 概要: DBのlowercase値とenum定義の不一致でLookupError発生
+  - 対応: Enum設定にvalues_callableを追加して小文字値をサポート
+  - GitHub: #127
+
+- [x] Issue #128: デスクトップの /game 画面で raw translation key がそのまま表示される `cc:完了`
+  - 概要: translation.jsonに不足キーがあり、t()でラップされていない箇所がある
+  - 対応: game/page.tsxの固定日本語文言をt()化（遊び方/敵/味方/地形 etc.）
+  - GitHub: #128
+
+---
+
 ## 🟢 新規タスク (Issues #121-124)
 
 ### フェーズ9：緊急バグ修正
@@ -70,6 +102,12 @@
 ---
 
 ## 📦 アーカイブ
+
+### 完了済みタスク (Issues #99-124)
+
+- **Issues #99-107**: すべて完了 (CPX-CHAT/CYCLES/VALIDATION/Ops-Compose/TRAINING/REPLAY/SYNC等) - 2026-03-10
+- **Issues #108-120**: すべて完了 (UI改善10件+API修正、i18n/接続インジケータ/シナリオランチャ等) - 2026-03-10
+- **Issues #121-124**: すべて完了 (CORS/DB/i18n等緊急バグ修正) - 2026-03-10
 
 ### 完了済みタスク (Issues #1-98)
 

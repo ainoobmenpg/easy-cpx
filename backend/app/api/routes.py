@@ -1517,7 +1517,7 @@ def generate_report(request: ReportRequest, db: Session = Depends(get_db)):
     - sustain: LOGSITREP - Logistics status
     """
     from app.services.report_generator import get_report_generator
-    from app.services.sitrep_generator import SitrepGenerator
+    from app.services.sitrep_generator import SITREPGenerator
 
     game = db.query(Game).filter(Game.id == request.game_id).first()
     if not game:
@@ -1548,7 +1548,7 @@ def generate_report(request: ReportRequest, db: Session = Depends(get_db)):
         })
 
     # Get sitrep generator
-    sitrep_gen = SitrepGenerator(db)
+    sitrep_gen = SITREPGenerator(db)
 
     # Generate report based on format
     report_gen = get_report_generator(sitrep_gen)

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useTranslation } from 'next-i18next';
+import { useI18n } from './i18n';
 import API from './api';
 
 export type ConnectionStatus = 'healthy' | 'timeout' | 'mismatch' | 'unknown';
@@ -84,7 +84,7 @@ interface ConnectionBadgeProps {
 }
 
 export function ConnectionBadge({ onClick }: ConnectionBadgeProps) {
-  const { t } = useTranslation();
+  const { t } = useI18n();
   const [connectionState, setConnectionState] = useState<ConnectionState>({ status: 'unknown' });
   const [isChecking, setIsChecking] = useState(false);
 
@@ -147,7 +147,7 @@ interface DiagnosticModalProps {
 }
 
 export function DiagnosticModal({ isOpen, onClose, connectionState, onRetry }: DiagnosticModalProps) {
-  const { t } = useTranslation();
+  const { t } = useI18n();
   if (!isOpen) return null;
 
   const recommendedUrl = getRecommendedUrl();

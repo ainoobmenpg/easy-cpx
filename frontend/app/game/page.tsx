@@ -767,9 +767,9 @@ function GameContent() {
 
       {showHelp && (
         <div className="bg-blue-900/30 border-b border-blue-700/50 px-4 py-1.5 text-xs shrink-0 backdrop-blur-sm">
-          <span className="font-bold text-blue-300">遊び方: </span>
-          <span>クリック→命令→ターン進行 | ズーム: Ctrl+ホイール or ボタン</span>
-          <span className="ml-3 text-gray-400">| ショートカット: Z=リセット L=凡例 H=ヘルプ M=モード P=PhaseLine B=Boundary A=Airspace 矢印=パン +/-=ズーム</span>
+          <span className="font-bold text-blue-300">{t('game.howToPlay')}: </span>
+          <span>{t('game.howToPlayDesc')}</span>
+          <span className="ml-3 text-gray-400">| {t('game.shortcuts')}: Z={t('game.resetZoom')} L={t('game.legend')} H={t('common.help')} M={t('game.modeToggle')} P=PhaseLine B=Boundary A=Airspace {t('game.pan')}=Pan +/-={t('game.zoom')}</span>
         </div>
       )}
 
@@ -917,8 +917,8 @@ function GameContent() {
 
           {/* Map Controls (outside clipped area) - modern glass style */}
           <div className="absolute top-3 right-3 flex flex-col gap-1.5 z-10">
-            <button onClick={handleZoomIn} aria-label="マップをzoom in" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-lg font-bold transition-colors border border-gray-600/30">+</button>
-            <button onClick={handleZoomOut} aria-label="マップをzoom out" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-lg font-bold transition-colors border border-gray-600/30">−</button>
+            <button onClick={handleZoomIn} aria-label={t('common.zoomIn')} className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-lg font-bold transition-colors border border-gray-600/30">+</button>
+            <button onClick={handleZoomOut} aria-label={t('common.zoomOut')} className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-lg font-bold transition-colors border border-gray-600/30">−</button>
             <button onClick={handleZoomReset} aria-label={t('game.resetZoom')} className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30">{t('common.zoomReset')}</button>
             <button onClick={() => setShowExactPosition(!showExactPosition)} aria-label={t('game.fowDebug')} aria-pressed={showExactPosition} className={`w-9 h-9 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30 ${showExactPosition ? 'bg-purple-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="FoW debug: Show exact positions">
               FoW
@@ -949,20 +949,20 @@ function GameContent() {
                   <span className="text-gray-300">{t('symbols.enemy')}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-400">✕ 歩兵</span>
+                  <span className="text-gray-400">✕ {t('game.infantry')}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-400">⇒ 装甲</span>
+                  <span className="text-gray-400">⇒ {t('game.armor')}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-400">+ 砲兵</span>
+                  <span className="text-gray-400">+ {t('game.artillery')}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-400">◇ 偵察</span>
+                  <span className="text-gray-400">◇ {t('game.recon')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-yellow-500 text-[10px] border border-yellow-500/50 rounded px-0.5">?</span>
-                  <span className="text-gray-300">推定位置</span>
+                  <span className="text-gray-300">{t('game.estimatedPos')}</span>
                 </div>
                 <div className="mt-2 pt-1 border-t border-gray-700/50">
                   <div className="flex gap-1">
@@ -972,7 +972,7 @@ function GameContent() {
                     <div className="w-2 h-2 rounded-full bg-red-500"></div>
                     <div className="w-2 h-2 rounded-full bg-gray-500"></div>
                   </div>
-                  <div className="text-gray-500 text-[10px]">無→壊</div>
+                  <div className="text-gray-500 text-[10px]">{t('game.damageLegend')}</div>
                 </div>
               </div>
             </div>
@@ -1158,10 +1158,10 @@ function GameContent() {
                       </div>
                     ) : (
                       <div className="space-y-1 text-gray-300">
-                        <div><span className="text-gray-500">敵:</span> {opordData.situation?.enemy_situation || '-'}</div>
-                        <div><span className="text-gray-500">味方:</span> {opordData.situation?.friendly_situation || '-'}</div>
-                        <div><span className="text-gray-500">地形:</span> {opordData.situation?.terrain_impact || '-'}</div>
-                        <div><span className="text-gray-500">天候:</span> {opordData.situation?.weather_impact || '-'}</div>
+                        <div><span className="text-gray-500">{t('opord.enemy')}:</span> {opordData.situation?.enemy_situation || '-'}</div>
+                        <div><span className="text-gray-500">{t('opord.friendly')}:</span> {opordData.situation?.friendly_situation || '-'}</div>
+                        <div><span className="text-gray-500">{t('opord.terrain')}:</span> {opordData.situation?.terrain_impact || '-'}</div>
+                        <div><span className="text-gray-500">{t('opord.weather')}:</span> {opordData.situation?.weather_impact || '-'}</div>
                       </div>
                     )}
                   </div>
@@ -1180,9 +1180,9 @@ function GameContent() {
                       </div>
                     ) : (
                       <div className="space-y-1 text-gray-300">
-                        <div><span className="text-gray-500">任務:</span> {opordData.mission?.task || '-'}</div>
-                        <div><span className="text-gray-500">目的:</span> {opordData.mission?.purpose || '-'}</div>
-                        <div><span className="text-gray-500">終結:</span> {opordData.mission?.end_state || '-'}</div>
+                        <div><span className="text-gray-500">{t('opord.task')}:</span> {opordData.mission?.task || '-'}</div>
+                        <div><span className="text-gray-500">{t('opord.purpose')}:</span> {opordData.mission?.purpose || '-'}</div>
+                        <div><span className="text-gray-500">{t('opord.endState')}:</span> {opordData.mission?.end_state || '-'}</div>
                       </div>
                     )}
                   </div>
@@ -1201,9 +1201,9 @@ function GameContent() {
                       </div>
                     ) : (
                       <div className="space-y-1 text-gray-300">
-                        <div><span className="text-gray-500">構想:</span> {opordData.execution?.concept_of_operations || '-'}</div>
-                        <div><span className="text-gray-500">調整:</span> {opordData.execution?.coordination || '-'}</div>
-                        <div><span className="text-gray-500">通信:</span> {opordData.execution?.command_signal || '-'}</div>
+                        <div><span className="text-gray-500">{t('opord.concept')}:</span> {opordData.execution?.concept_of_operations || '-'}</div>
+                        <div><span className="text-gray-500">{t('opord.coord')}:</span> {opordData.execution?.coordination || '-'}</div>
+                        <div><span className="text-gray-500">{t('opord.commandSignal')}:</span> {opordData.execution?.command_signal || '-'}</div>
                       </div>
                     )}
                   </div>
@@ -1222,9 +1222,9 @@ function GameContent() {
                       </div>
                     ) : (
                       <div className="space-y-1 text-gray-300">
-                        <div><span className="text-gray-500">火力:</span> {opordData.coordination?.fire_support || '-'}</div>
-                        <div><span className="text-gray-500">航空:</span> {opordData.coordination?.air_support || '-'}</div>
-                        <div><span className="text-gray-500">指揮:</span> {opordData.coordination?.c2_relationships || '-'}</div>
+                        <div><span className="text-gray-500">{t('opord.fireSupport')}:</span> {opordData.coordination?.fire_support || '-'}</div>
+                        <div><span className="text-gray-500">{t('opord.airSupport')}:</span> {opordData.coordination?.air_support || '-'}</div>
+                        <div><span className="text-gray-500">{t('opord.c2')}:</span> {opordData.coordination?.c2_relationships || '-'}</div>
                       </div>
                     )}
                   </div>
@@ -1243,10 +1243,10 @@ function GameContent() {
                       </div>
                     ) : (
                       <div className="space-y-1 text-gray-300">
-                        <div><span className="text-gray-500">弾薬:</span> {opordData.service_support?.supply?.ammo || '-'}</div>
-                        <div><span className="text-gray-500">燃料:</span> {opordData.service_support?.supply?.fuel || '-'}</div>
-                        <div><span className="text-gray-500">整備:</span> {opordData.service_support?.maintenance || '-'}</div>
-                        <div><span className="text-gray-500">衛生:</span> {opordData.service_support?.medical || '-'}</div>
+                        <div><span className="text-gray-500">{t('opord.ammo')}:</span> {opordData.service_support?.supply?.ammo || '-'}</div>
+                        <div><span className="text-gray-500">{t('opord.fuel')}:</span> {opordData.service_support?.supply?.fuel || '-'}</div>
+                        <div><span className="text-gray-500">{t('opord.maintenance')}:</span> {opordData.service_support?.maintenance || '-'}</div>
+                        <div><span className="text-gray-500">{t('opord.medical')}:</span> {opordData.service_support?.medical || '-'}</div>
                       </div>
                     )}
                   </div>
@@ -1476,7 +1476,7 @@ function GameContent() {
                         ))}
                       </div>
                       {(selectedUnit as any).strike_next_attack_blocked && (
-                        <span className="text-red-400 text-[10px]">(次ターン攻撃不可)</span>
+                        <span className="text-red-400 text-[10px]">({t('game.cannotAttackNextTurn')})</span>
                       )}
                     </div>
                   )}
@@ -1524,7 +1524,7 @@ function GameContent() {
                 ))}
               </div>
             ) : (
-              <p className="text-gray-500 text-xs">ターン進行で記録されます</p>
+              <p className="text-gray-500 text-xs">{t('game.noHistory')}</p>
             )}
           </div>
 
@@ -1544,11 +1544,11 @@ function GameContent() {
       <div className="h-12 bg-gray-800/90 border-t border-gray-700/50 flex items-center justify-between px-4 shrink-0 backdrop-blur-sm">
         <div className="flex items-center gap-6 text-xs">
           <div className="flex items-center gap-2">
-            <span className="text-gray-400">ターン</span>
+            <span className="text-gray-400">{t('turn')}</span>
             <span className="font-bold text-blue-400">T{gameState.turn}</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-gray-400">フェーズ</span>
+            <span className="text-gray-400">{t('games.phase')}</span>
             <span className="font-medium text-cyan-400">{gameState.phase}</span>
           </div>
           <div className="flex items-center gap-2">
