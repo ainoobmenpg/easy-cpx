@@ -706,7 +706,7 @@ function GameContent() {
       {error ? (
         <ErrorDisplay message={error} title={t('game.loadError')} onRetry={fetchGameState} />
       ) : (
-        <LoadingDisplay message="戦術マップを読み込み中..." />
+        <LoadingDisplay message={t('game.loading')} />
       )}
     </div>
   );
