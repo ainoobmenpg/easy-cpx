@@ -138,9 +138,9 @@ class TestCasualtyEfficiencyTracker:
         tracker.initialize(10, 15)
         tracker.update_casualties(player_destroyed=0, enemy_destroyed=3)
 
-        # Division by zero case
+        # Division by zero case - returns None instead of inf for JSON serialization
         ratio = tracker.get_efficiency_ratio()
-        assert ratio == float('inf')
+        assert ratio is None
 
     def test_preservation_rate(self):
         """Test force preservation rate"""

@@ -2,7 +2,9 @@
   {
     "id": "defend-the-bridge",
     "name": "橋の防衛",
-    "description": "敵の進撃を阻止し、橋を維持せよ。敵主力装甲部隊が接近中、味方増援が到着するまでの時間猶予仅有り。",
+    "name_en": "Bridge Defense",
+    "description": "敵の進撃を阻止し、橋を維持せよ。敵主力装甲部隊が接近中、味方増援が到着するまでの時間猶予しかり。",
+    "description_en": "Stop the enemy advance and hold the bridge. Enemy armored main force is approaching with limited time before friendly reinforcements arrive.",
     "difficulty": "normal",
     "map_size": {
       "width": 50,
@@ -49,7 +51,9 @@
   {
     "id": "breakthrough",
     "name": "突破口",
-    "description": "敵戦線を突破し、後方拠点占领せよ。激しい抵抗が予想される。",
+    "name_en": "Breakthrough",
+    "description": "敵戦線を突破し、後方拠点 占領せよ。激しい抵抗が予想される。",
+    "description_en": "Break through the enemy line and seize the rear base. Fierce resistance is expected.",
     "difficulty": "hard",
     "map_size": {
       "width": 60,
@@ -96,7 +100,9 @@
   {
     "id": "counter-attack",
     "name": "反撃",
+    "name_en": "Counter-Attack",
     "description": "敵の攻撃を撃退し、奪われた地域を奪還せよ。味方は劣勢だが、地形を味方に付けることができる。",
+    "description_en": "Repulse the enemy attack and recapture lost territory. Friendly forces are at a disadvantage but can use terrain to their advantage.",
     "difficulty": "easy",
     "map_size": {
       "width": 40,
@@ -141,7 +147,9 @@
   {
     "id": "urban-assault",
     "name": "都市攻略",
+    "name_en": "Urban Assault",
     "description": "敵が 占領した都市を奪還せよ。街区ごとに攻略が必要となり、砲兵火力と連携した慎重な行動が求められる。",
+    "description_en": "Recapture the city occupied by enemy forces. Street-by-street clearance required with coordinated artillery support.",
     "difficulty": "hard",
     "map_size": {
       "width": 50,
@@ -188,7 +196,9 @@
   {
     "id": "escort-mission",
     "name": "護衛任務",
+    "name_en": "Escort Mission",
     "description": "輸送補給部隊を目的地まで護衛せよ。敵遊撃部隊の攻撃が予想される。",
+    "description_en": "Escort the supply convoy to its destination. Enemy guerrilla attacks are expected.",
     "difficulty": "normal",
     "map_size": {
       "width": 60,
@@ -226,7 +236,9 @@
   {
     "id": "night-recon",
     "name": "夜間偵察",
+    "name_en": "Night Reconnaissance",
     "description": "敵陣地の偵察任務。視界不良のため慎重な行動が必要だが、奇襲の機会でもある。",
+    "description_en": "Reconnaissance mission of enemy positions. Low visibility requires careful movement but offers surprise opportunities.",
     "difficulty": "easy",
     "map_size": {
       "width": 40,
@@ -269,7 +281,9 @@
   {
     "id": "mountain-defense",
     "name": "山岳防衛",
+    "name_en": "Mountain Defense",
     "description": "山岳地帯の要衝を防衛せよ。地形を味方に付け、敵の攻撃を撃退しろ。",
+    "description_en": "Defend the mountain pass. Use terrain to your advantage and repel enemy attacks.",
     "difficulty": "normal",
     "map_size": {
       "width": 45,
@@ -314,7 +328,9 @@
   {
     "id": "blitzkrieg",
     "name": "電撃作戦",
+    "name_en": "Lightning War",
     "description": "快速装甲部隊で敵後方を奇襲せよ。早期決着が重要。",
+    "description_en": "Launch a surprise attack on the enemy rear with fast armor units. Early resolution is critical.",
     "difficulty": "hard",
     "map_size": {
       "width": 70,
@@ -361,7 +377,9 @@
   {
     "id": "fulda-lite",
     "name": "フルダ・ギャップ",
+    "name_en": "Fulda Gap",
     "description": "冷戦シナリオ。フルダGapを防御し、Warsaw Pactの進撃を阻止せよ。",
+    "description_en": "Cold War scenario. Defend the Fulda Gap and stop the Warsaw Pact advance.",
     "difficulty": "normal",
     "map_size": {
       "width": 50,
@@ -424,7 +442,9 @@
   {
     "id": "baltic",
     "name": "バルト海岸",
+    "name_en": "Baltic Coast",
     "description": "バルト海沿岸の都市戦闘。海岸線を確保し、敵の包囲を撃破せよ。",
+    "description_en": "Urban combat along the Baltic Sea coast. Secure the coastline and break the enemy encirclement.",
     "difficulty": "hard",
     "map_size": {
       "width": 60,
@@ -486,7 +506,9 @@
   {
     "id": "desert",
     "name": "砂漠の嵐",
+    "name_en": "Desert Storm",
     "description": "砂漠での快速機動戦。オアシスを確保し、敵増援到着前に決着せよ。",
+    "description_en": "Fast mobile warfare in the desert. Secure the oasis and end the battle before enemy reinforcements arrive.",
     "difficulty": "easy",
     "map_size": {
       "width": 70,
