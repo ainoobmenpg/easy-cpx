@@ -101,6 +101,13 @@ class GameStateService:
         # Include player knowledge for frontend UI (last known enemy positions, etc.)
         state["player_knowledge"] = known_enemies
 
+        # Include CPX-CYCLES: Planning/Air/Logistics cycle status
+        state["cycles"] = {
+            "planning": game.planning_cycle,
+            "air_tasking": game.air_tasking_cycle,
+            "logistics": game.logistics_cycle,
+        }
+
         return state
 
 

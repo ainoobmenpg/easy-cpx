@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'next-i18next';
 import API from './api';
 
 export type ConnectionStatus = 'healthy' | 'timeout' | 'mismatch' | 'unknown';
@@ -11,7 +12,7 @@ interface HealthResponse {
   timestamp?: string;
 }
 
-interface ConnectionState {
+export interface ConnectionState {
   status: ConnectionStatus;
   latency?: number;
   healthResponse?: HealthResponse;
@@ -83,6 +84,7 @@ interface ConnectionBadgeProps {
 }
 
 export function ConnectionBadge({ onClick }: ConnectionBadgeProps) {
+  const { t } = useTranslation();
   const [connectionState, setConnectionState] = useState<ConnectionState>({ status: 'unknown' });
   const [isChecking, setIsChecking] = useState(false);
 
@@ -109,10 +111,10 @@ export function ConnectionBadge({ onClick }: ConnectionBadgeProps) {
   }, []);
 
   const statusConfig = {
-    healthy: { color: 'bg-green-500', text: '接続OK', textColor: 'text-green-600' },
-    timeout: { color: 'bg-yellow-500', text: 'タイムアウト', textColor: 'text-yellow-600' },
-    mismatch: { color: 'bg-red-500', text: '接続エラー', textColor: 'text-red-600' },
-    unknown: { color: 'bg-gray-400', text: '未確認', textColor: 'text-gray-500' }
+    healthy: { color: 'bg-green-500', text: t('connection.connected'), textColor: 'text-green-600' },
+    timeout: { color: 'bg-yellow-500', text: t('connection.timeout'), textColor: 'text-yellow-600' },
+    mismatch: { color: 'bg-red-500', text: t('connection.error'), textColor: 'text-red-600' },
+    unknown: { color: 'bg-gray-400', text: t('connection.unknown'), textColor: 'text-gray-500' }
   };
 
   const config = statusConfig[connectionState.status];
@@ -145,6 +147,7 @@ interface DiagnosticModalProps {
 }
 
 export function DiagnosticModal({ isOpen, onClose, connectionState, onRetry }: DiagnosticModalProps) {
+  const { t } = useTranslation();
   if (!isOpen) return null;
 
   const recommendedUrl = getRecommendedUrl();
@@ -158,7 +161,7 @@ export function DiagnosticModal({ isOpen, onClose, connectionState, onRetry }: D
         onClick={e => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">API接続診断</h2>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t('connection.diagnostic')}</h2>
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl"
@@ -170,7 +173,7 @@ export function DiagnosticModal({ isOpen, onClose, connectionState, onRetry }: D
         <div className="space-y-4">
           {/* Status */}
           <div className="p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
-            <h3 className="font-semibold mb-2 text-gray-900 dark:text-white">接続状態</h3>
+            <h3 className="font-semibold mb-2 text-gray-900 dark:text-white">{t('connection.status')}</h3>
             <div className="flex items-center gap-2">
               <span className={`w-3 h-3 rounded-full ${
                 connectionState.status === 'healthy' ? 'bg-green-500' :
@@ -178,8 +181,8 @@ export function DiagnosticModal({ isOpen, onClose, connectionState, onRetry }: D
                 'bg-red-500'
               }`} />
               <span className="text-gray-700 dark:text-gray-300">
-                {connectionState.status === 'healthy' ? '正常' :
-                 connectionState.status === 'timeout' ? 'タイムアウト' : 'エラー'}
+                {connectionState.status === 'healthy' ? t('connection.healthy') :
+                 connectionState.status === 'timeout' ? t('connection.timeout') : t('connection.error')}
               </span>
               {connectionState.latency && (
                 <span className="text-sm text-gray-500 ml-2">({connectionState.latency}ms)</span>
@@ -192,20 +195,20 @@ export function DiagnosticModal({ isOpen, onClose, connectionState, onRetry }: D
 
           {/* Current URL */}
           <div className="p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
-            <h3 className="font-semibold mb-2 text-gray-900 dark:text-white">現在のAPI URL</h3>
+            <h3 className="font-semibold mb-2 text-gray-900 dark:text-white">{t('connection.currentUrl')}</h3>
             <code className="text-sm bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded break-all">
               {currentUrl}
             </code>
             {!isUrlMatch && (
               <p className="text-sm text-yellow-600 mt-2">
-                推奨値と異なります
+                {t('connection.differentFromRecommended')}
               </p>
             )}
           </div>
 
           {/* Recommended URL */}
           <div className="p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
-            <h3 className="font-semibold mb-2 text-gray-900 dark:text-white">推奨API URL</h3>
+            <h3 className="font-semibold mb-2 text-gray-900 dark:text-white">{t('connection.recommendedUrl')}</h3>
             <code className="text-sm bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded">
               {recommendedUrl}
             </code>
@@ -214,7 +217,7 @@ export function DiagnosticModal({ isOpen, onClose, connectionState, onRetry }: D
           {/* Health Response */}
           {connectionState.healthResponse && (
             <div className="p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
-              <h3 className="font-semibold mb-2 text-gray-900 dark:text-white">サーバー情報</h3>
+              <h3 className="font-semibold mb-2 text-gray-900 dark:text-white">{t('connection.serverInfo')}</h3>
               <pre className="text-xs bg-gray-200 dark:bg-gray-600 p-2 rounded overflow-x-auto">
                 {JSON.stringify(connectionState.healthResponse, null, 2)}
               </pre>
@@ -227,13 +230,13 @@ export function DiagnosticModal({ isOpen, onClose, connectionState, onRetry }: D
             onClick={onRetry}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
           >
-            再接続テスト
+            {t('connection.retryTest')}
           </button>
           <button
             onClick={onClose}
             className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-white rounded-lg transition-colors"
           >
-            閉じる
+            {t('connection.close')}
           </button>
         </div>
       </div>

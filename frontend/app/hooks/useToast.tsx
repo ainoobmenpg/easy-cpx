@@ -7,6 +7,7 @@ import {
   useCallback,
   ReactNode,
 } from 'react';
+import { useI18n } from '../lib/i18n';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -66,6 +67,7 @@ function ToastContainer({
   toasts: Toast[];
   onHide: (id: string) => void;
 }) {
+  const { t } = useI18n();
   if (toasts.length === 0) return null;
 
   return (
@@ -88,7 +90,7 @@ function ToastContainer({
           <button
             onClick={() => onHide(toast.id)}
             className="text-white/70 hover:text-white transition-colors"
-            aria-label="閉じる"
+            aria-label={t('common.close')}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

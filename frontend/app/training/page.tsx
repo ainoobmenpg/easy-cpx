@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import API from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import LanguageSwitcher from "../lib/language-switcher";
 
@@ -69,7 +70,7 @@ export default function TrainingDashboard() {
 
   const fetchMetrics = async () => {
     try {
-      const res = await fetch(`/api/training/metrics/${gameId}`);
+      const res = await fetch(API.trainingMetrics(gameId));
       const data = await res.json();
       if (!data.error) {
         setMetrics(data);
@@ -81,7 +82,7 @@ export default function TrainingDashboard() {
 
   const fetchSummary = async () => {
     try {
-      const res = await fetch(`/api/training/summary/${gameId}`);
+      const res = await fetch(API.trainingSummary(gameId));
       const data = await res.json();
       if (!data.error) {
         setSummary(data);
@@ -95,7 +96,7 @@ export default function TrainingDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/training/initialize", {
+      const res = await fetch(API.trainingInitialize, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -111,10 +112,10 @@ export default function TrainingDashboard() {
         await fetchMetrics();
         await fetchSummary();
       } else {
-        setError(data.error || "Failed to initialize");
+        setError(data.error || t('training.error.initFailed'));
       }
     } catch (err) {
-      setError("Failed to initialize scoreboard");
+      setError(t('training.error.initFailed'));
     } finally {
       setLoading(false);
     }
@@ -123,7 +124,7 @@ export default function TrainingDashboard() {
   const finalizeScoreboard = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/training/finalize", {
+      const res = await fetch(API.trainingFinalize, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ game_id: gameId }),
@@ -133,7 +134,7 @@ export default function TrainingDashboard() {
         await fetchSummary();
       }
     } catch (err) {
-      setError("Failed to finalize scoreboard");
+      setError(t('training.error.finalizeFailed'));
     } finally {
       setLoading(false);
     }
@@ -142,7 +143,7 @@ export default function TrainingDashboard() {
   const simulateTurn = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/training/update", {
+      const res = await fetch(API.trainingUpdate, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -160,7 +161,7 @@ export default function TrainingDashboard() {
         await fetchSummary();
       }
     } catch (err) {
-      setError("Failed to update turn");
+      setError(t('training.error.updateFailed'));
     } finally {
       setLoading(false);
     }
@@ -224,7 +225,7 @@ export default function TrainingDashboard() {
               {t('training.title')}
             </h1>
             <p className="text-gray-400 mt-2">
-              CCIR Achievement / ROE Compliance / Casualty Efficiency / Time Performance
+              {t('training.ccirAchievement')} / {t('training.roeCompliance')} / {t('training.casualtyEfficiency')} / {t('training.timePerformance')}
             </p>
           </div>
           <LanguageSwitcher />
@@ -232,10 +233,10 @@ export default function TrainingDashboard() {
 
         {!initialized && (
           <div className="bg-gray-900 rounded-lg p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">Initialize Training Session</h2>
+            <h2 className="text-xl font-semibold mb-4">{t('training.initializeSession')}</h2>
             <div className="flex gap-4 items-center">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Game ID</label>
+                <label className="block text-sm text-gray-400 mb-1">{t('training.gameId')}</label>
                 <input
                   type="number"
                   value={gameId}
@@ -248,7 +249,7 @@ export default function TrainingDashboard() {
                 disabled={loading}
                 className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded font-medium mt-5 disabled:opacity-50"
               >
-                {loading ? "Initializing..." : "Start Training"}
+                {loading ? t('training.processing') : t('training.startTraining')}
               </button>
             </div>
             {error && <p className="text-red-400 mt-3">{error}</p>}
@@ -261,17 +262,17 @@ export default function TrainingDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
               {/* Overall Score */}
               <div className="bg-gray-900 rounded-lg p-6">
-                <h3 className="text-sm text-gray-400 uppercase mb-2">Overall Score</h3>
+                <h3 className="text-sm text-gray-400 uppercase mb-2">{t('training.overallScore')}</h3>
                 <div className="text-4xl font-bold text-white">
                   {metrics.overall_score}
                   <span className="text-lg text-gray-500">/100</span>
                 </div>
-                <div className="mt-2 text-sm text-gray-400">Turn {metrics.current_turn}</div>
+                <div className="mt-2 text-sm text-gray-400">{t('training.turn')} {metrics.current_turn}</div>
               </div>
 
               {/* CCIR Achievement */}
               <div className="bg-gray-900 rounded-lg p-6">
-                <h3 className="text-sm text-gray-400 uppercase mb-2">CCIR Achievement</h3>
+                <h3 className="text-sm text-gray-400 uppercase mb-2">{t('training.ccirAchievement')}</h3>
                 <div className="text-4xl font-bold">
                   <span className={getProgressBarColor(metrics.ccir_achievement_rate).replace("bg-", "text-")}>
                     {metrics.ccir_achievement_rate}%
@@ -287,7 +288,7 @@ export default function TrainingDashboard() {
 
               {/* ROE Compliance */}
               <div className="bg-gray-900 rounded-lg p-6">
-                <h3 className="text-sm text-gray-400 uppercase mb-2">ROE Compliance</h3>
+                <h3 className="text-sm text-gray-400 uppercase mb-2">{t('training.roeCompliance')}</h3>
                 <div className="text-4xl font-bold">
                   <span className={getProgressBarColor(metrics.roe_compliance_rate).replace("bg-", "text-")}>
                     {metrics.roe_compliance_rate}%
@@ -303,14 +304,14 @@ export default function TrainingDashboard() {
 
               {/* Time Performance */}
               <div className="bg-gray-900 rounded-lg p-6">
-                <h3 className="text-sm text-gray-400 uppercase mb-2">Time Performance</h3>
+                <h3 className="text-sm text-gray-400 uppercase mb-2">{t('training.timePerformance')}</h3>
                 <div className="text-4xl font-bold">
                   <span className={getProgressBarColor(metrics.time_performance).replace("bg-", "text-")}>
                     {metrics.time_performance}%
                   </span>
                 </div>
                 <div className="mt-2 text-sm text-gray-400">
-                  Efficiency: {metrics.casualty_efficiency}x
+                  {t('training.efficiency')}: {metrics.casualty_efficiency}x
                 </div>
               </div>
             </div>
@@ -322,14 +323,14 @@ export default function TrainingDashboard() {
                 disabled={loading}
                 className="bg-green-600 hover:bg-green-700 px-6 py-2 rounded font-medium disabled:opacity-50"
               >
-                {loading ? "Processing..." : "Simulate Turn"}
+                {loading ? t('training.processing') : t('training.simulateTurn')}
               </button>
               <button
                 onClick={finalizeScoreboard}
                 disabled={loading}
                 className="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded font-medium disabled:opacity-50"
               >
-                Finalize & Get Grade
+                {t('training.finalizeGrade')}
               </button>
             </div>
           </>
@@ -338,7 +339,7 @@ export default function TrainingDashboard() {
         {/* Final Grade Display */}
         {summary && summary.grade && (
           <div className={`${getGradeBg(summary.grade)} rounded-lg p-8 mb-6 text-center`}>
-            <h2 className="text-2xl font-bold mb-4">Final Assessment</h2>
+            <h2 className="text-2xl font-bold mb-4">{t('training.finalAssessment')}</h2>
             <div className="flex items-center justify-center gap-8">
               {/* Star Rating */}
               <div className="text-6xl">
@@ -357,7 +358,7 @@ export default function TrainingDashboard() {
               </div>
               {/* Score */}
               <div className="text-2xl">
-                <div className="text-gray-400">Score</div>
+                <div className="text-gray-400">{t('training.overallScore')}</div>
                 <div className="font-bold text-white">{summary.overall_score}</div>
               </div>
             </div>
@@ -369,7 +370,7 @@ export default function TrainingDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* CCIR Details */}
             <div className="bg-gray-900 rounded-lg p-6">
-              <h3 className="text-lg font-semibold mb-4">CCIR Status</h3>
+              <h3 className="text-lg font-semibold mb-4">{t('training.ccirStatus')}</h3>
               <div className="space-y-3">
                 {summary.ccir.ccirs.map((ccir) => (
                   <div key={ccir.id} className="flex items-center gap-3">
@@ -394,7 +395,7 @@ export default function TrainingDashboard() {
               </div>
               <div className="mt-4 pt-4 border-t border-gray-800">
                 <div className="text-sm text-gray-400">
-                  Achievement: {summary.ccir.achieved}/{summary.ccir.total} (
+                  {t('training.achievement')}: {summary.ccir.achieved}/{summary.ccir.total} (
                   {summary.ccir.achievement_rate}%)
                 </div>
               </div>
@@ -402,11 +403,11 @@ export default function TrainingDashboard() {
 
             {/* ROE Details */}
             <div className="bg-gray-900 rounded-lg p-6">
-              <h3 className="text-lg font-semibold mb-4">ROE Compliance</h3>
+              <h3 className="text-lg font-semibold mb-4">{t('training.roeCompliance')}</h3>
               <div className="space-y-4">
                 <div>
                   <div className="flex justify-between mb-1">
-                    <span className="text-gray-400">Compliance Rate</span>
+                    <span className="text-gray-400">{t('training.achievementRate')}</span>
                     <span>{summary.roe.compliance_rate}%</span>
                   </div>
                   <div className="w-full bg-gray-800 rounded-full h-2">
@@ -423,13 +424,13 @@ export default function TrainingDashboard() {
                     <div className="text-2xl font-bold text-red-400">
                       {summary.roe.total_violations}
                     </div>
-                    <div className="text-sm text-gray-400">Violations</div>
+                    <div className="text-sm text-gray-400">{t('training.violations')}</div>
                   </div>
                   <div className="bg-gray-800 rounded p-3">
                     <div className="text-2xl font-bold text-yellow-400">
                       {summary.roe.total_warnings}
                     </div>
-                    <div className="text-sm text-gray-400">Warnings</div>
+                    <div className="text-sm text-gray-400">{t('training.warnings')}</div>
                   </div>
                 </div>
               </div>
@@ -437,10 +438,10 @@ export default function TrainingDashboard() {
 
             {/* Casualty Efficiency */}
             <div className="bg-gray-900 rounded-lg p-6">
-              <h3 className="text-lg font-semibold mb-4">Casualty Efficiency</h3>
+              <h3 className="text-lg font-semibold mb-4">{t('training.casualtyEfficiency')}</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gray-800 rounded p-4">
-                  <div className="text-sm text-gray-400 mb-1">Efficiency Ratio</div>
+                  <div className="text-sm text-gray-400 mb-1">{t('training.efficiencyRatio')}</div>
                   <div className="text-2xl font-bold text-white">
                     {summary.casualty_efficiency.efficiency_ratio === Infinity
                       ? "∞"
@@ -448,23 +449,23 @@ export default function TrainingDashboard() {
                   </div>
                 </div>
                 <div className="bg-gray-800 rounded p-4">
-                  <div className="text-sm text-gray-400 mb-1">Preservation</div>
+                  <div className="text-sm text-gray-400 mb-1">{t('training.preservation')}</div>
                   <div className="text-2xl font-bold text-green-400">
                     {summary.casualty_efficiency.player_preservation}%
                   </div>
                 </div>
                 <div className="bg-gray-800 rounded p-4">
-                  <div className="text-sm text-gray-400 mb-1">Player Losses</div>
+                  <div className="text-sm text-gray-400 mb-1">{t('training.playerLosses')}</div>
                   <div className="text-xl font-bold text-red-400">
-                    {summary.casualty_efficiency.player_losses.destroyed} destroyed,{" "}
-                    {summary.casualty_efficiency.player_losses.damaged} damaged
+                    {summary.casualty_efficiency.player_losses.destroyed} {t('training.destroyed')},{" "}
+                    {summary.casualty_efficiency.player_losses.damaged} {t('training.damaged')}
                   </div>
                 </div>
                 <div className="bg-gray-800 rounded p-4">
-                  <div className="text-sm text-gray-400 mb-1">Enemy Losses</div>
+                  <div className="text-sm text-gray-400 mb-1">{t('training.enemyLosses')}</div>
                   <div className="text-xl font-bold text-green-400">
-                    {summary.casualty_efficiency.enemy_losses.destroyed} destroyed,{" "}
-                    {summary.casualty_efficiency.enemy_losses.damaged} damaged
+                    {summary.casualty_efficiency.enemy_losses.destroyed} {t('training.destroyed')},{" "}
+                    {summary.casualty_efficiency.enemy_losses.damaged} {t('training.damaged')}
                   </div>
                 </div>
               </div>
@@ -472,18 +473,18 @@ export default function TrainingDashboard() {
 
             {/* Time Performance */}
             <div className="bg-gray-900 rounded-lg p-6">
-              <h3 className="text-lg font-semibold mb-4">Time Performance</h3>
+              <h3 className="text-lg font-semibold mb-4">{t('training.timePerformance')}</h3>
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400">Target Turns</span>
+                  <span className="text-gray-400">{t('training.targetTurns')}</span>
                   <span className="font-bold">{summary.time_performance.target_turns}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400">Current Turn</span>
+                  <span className="text-gray-400">{t('training.currentTurn')}</span>
                   <span className="font-bold">{summary.time_performance.current_turn}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400">Within Target</span>
+                  <span className="text-gray-400">{t('training.withinTarget')}</span>
                   <span
                     className={`font-bold ${
                       summary.time_performance.within_target
@@ -491,12 +492,12 @@ export default function TrainingDashboard() {
                         : "text-red-400"
                     }`}
                   >
-                    {summary.time_performance.within_target ? "Yes" : "No"}
+                    {summary.time_performance.within_target ? t('training.yes') : t('training.no')}
                   </span>
                 </div>
                 <div>
                   <div className="flex justify-between mb-1">
-                    <span className="text-gray-400">Achievement Rate</span>
+                    <span className="text-gray-400">{t('training.achievementRate')}</span>
                     <span>{summary.time_performance.achievement_rate}%</span>
                   </div>
                   <div className="w-full bg-gray-800 rounded-full h-2">
@@ -516,16 +517,16 @@ export default function TrainingDashboard() {
         {/* Turn History Chart */}
         {summary && summary.turn_history.length > 0 && (
           <div className="bg-gray-900 rounded-lg p-6 mt-6">
-            <h3 className="text-lg font-semibold mb-4">Turn History</h3>
+            <h3 className="text-lg font-semibold mb-4">{t('training.turnHistory')}</h3>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-800">
-                    <th className="text-left py-2 px-3 text-gray-400">Turn</th>
-                    <th className="text-left py-2 px-3 text-gray-400">CCIR Rate</th>
-                    <th className="text-left py-2 px-3 text-gray-400">ROE Rate</th>
-                    <th className="text-left py-2 px-3 text-gray-400">Efficiency</th>
-                    <th className="text-left py-2 px-3 text-gray-400">Time Rate</th>
+                    <th className="text-left py-2 px-3 text-gray-400">{t('training.turn')}</th>
+                    <th className="text-left py-2 px-3 text-gray-400">{t('training.ccirRate')}</th>
+                    <th className="text-left py-2 px-3 text-gray-400">{t('training.roeRate')}</th>
+                    <th className="text-left py-2 px-3 text-gray-400">{t('training.efficiency')}</th>
+                    <th className="text-left py-2 px-3 text-gray-400">{t('training.timeRate')}</th>
                   </tr>
                 </thead>
                 <tbody>

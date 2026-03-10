@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import API from '../lib/api';
 import { useI18n } from '../lib/i18n';
 import LanguageSwitcher from '../lib/language-switcher';
+import { ConnectionBadge, DiagnosticModal, checkConnection, ConnectionState } from '../lib/connection-indicator';
 import { ScenarioCardSkeleton } from '../components/Skeleton';
 import ErrorDisplay from '../components/ErrorDisplay';
 import { useToast } from '../hooks/useToast';
@@ -40,6 +41,8 @@ export default function ScenariosPage() {
   const [loading, setLoading] = useState(true);
   const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
   const [startingGame, setStartingGame] = useState(false);
+  const [diagnosticOpen, setDiagnosticOpen] = useState(false);
+  const [connectionState, setConnectionState] = useState<ConnectionState>({ status: 'unknown' });
 
   useEffect(() => {
     fetch(API.scenarios)
@@ -61,6 +64,19 @@ export default function ScenariosPage() {
         setLoading(false);
       });
   }, []);
+
+  // Check connection status on mount
+  useEffect(() => {
+    (async () => {
+      const result = await checkConnection();
+      setConnectionState(result);
+    })();
+  }, []);
+
+  const handleRetry = async () => {
+    const result = await checkConnection();
+    setConnectionState(result);
+  };
 
   const handleStartGame = async (scenarioId: string) => {
     setStartingGame(true);
@@ -105,11 +121,18 @@ export default function ScenariosPage() {
   };
 
   const getDifficultyLabel = (difficulty: string) => {
-    switch (difficulty) {
-      case 'easy': return '簡単';
-      case 'normal': return '普通';
-      case 'hard': return '難しい';
-      default: return difficulty;
+    const key = `difficulty.${difficulty}` as const;
+    return t(key) || difficulty;
+  };
+
+  // Handle direct start from card click (double-click or long-press alternative: select then start button)
+  const handleScenarioClick = (scenario: Scenario) => {
+    if (selectedScenario?.id === scenario.id) {
+      // Already selected, start the game
+      handleStartGame(scenario.id);
+    } else {
+      // Select the scenario and show details
+      setSelectedScenario(scenario);
     }
   };
 
@@ -122,6 +145,7 @@ export default function ScenariosPage() {
               {t('common.gameTitle')} - {t('common.scenarioSelect') || 'Scenario Select'}
             </h1>
             <div className="flex gap-3 items-center">
+              <ConnectionBadge onClick={() => setDiagnosticOpen(true)} />
               <LanguageSwitcher />
               <button
                 onClick={() => router.push('/games')}
@@ -173,8 +197,11 @@ export default function ScenariosPage() {
       </header>
 
       <main className="max-w-6xl mx-auto p-6">
-        <p className="text-gray-400 mb-8 text-center">
+        <p className="text-gray-400 mb-4 text-center">
           {t('common.selectScenario')}
+        </p>
+        <p className="text-gray-500 text-sm mb-6 text-center">
+          {t('scenarios.selectHint')}
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -186,7 +213,7 @@ export default function ScenariosPage() {
                   ? 'border-blue-500 shadow-lg shadow-blue-900/30'
                   : 'border-gray-700/50 hover:border-gray-600/50 hover:shadow-lg hover:shadow-gray-900/20'
               }`}
-              onClick={() => setSelectedScenario(scenario)}
+              onClick={() => handleScenarioClick(scenario)}
             >
               <div className="flex justify-between items-start mb-3">
                 <h2 className="text-xl font-bold text-blue-300">{scenario.name}</h2>
@@ -197,8 +224,20 @@ export default function ScenariosPage() {
               <p className="text-gray-400 text-sm mb-4 line-clamp-3">
                 {scenario.description}
               </p>
-              <div className="flex items-center gap-4 text-xs text-gray-500">
-                <span>Map: {scenario.map_size.width}x{scenario.map_size.height}</span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500">{t('scenarios.mapLabel')}: {scenario.map_size.width}x{scenario.map_size.height}</span>
+                {selectedScenario?.id === scenario.id && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleStartGame(scenario.id);
+                    }}
+                    disabled={startingGame}
+                    className="bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 text-white text-sm font-bold py-1.5 px-3 rounded transition-colors"
+                  >
+                    {startingGame ? t('scenarios.starting') : t('scenarios.missionStart')}
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -216,10 +255,10 @@ export default function ScenariosPage() {
               <p className="text-gray-300 mb-6">{selectedScenario.description}</p>
 
               <div className="bg-gray-900/50 rounded-lg p-4 mb-6">
-                <h3 className="text-sm font-bold text-gray-400 mb-2">マップ情報</h3>
+                <h3 className="text-sm font-bold text-gray-400 mb-2">{t('scenarios.mapInfo')}</h3>
                 <div className="flex gap-6 text-sm">
                   <div>
-                    <span className="text-gray-500">サイズ:</span>
+                    <span className="text-gray-500">{t('scenarios.size')}:</span>
                     <span className="text-gray-300 ml-2">{selectedScenario.map_size.width} x {selectedScenario.map_size.height}</span>
                   </div>
                 </div>
@@ -231,19 +270,25 @@ export default function ScenariosPage() {
                   disabled={startingGame}
                   className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg transition-colors"
                 >
-                  {startingGame ? '開始中...' : 'ミッション開始'}
+                  {startingGame ? t('scenarios.starting') : t('scenarios.missionStart')}
                 </button>
                 <button
                   onClick={() => setSelectedScenario(null)}
                   className="px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
                 >
-                  キャンセル
+                  {t('actions.cancel')}
                 </button>
               </div>
             </div>
           </div>
         )}
       </main>
+      <DiagnosticModal
+        isOpen={diagnosticOpen}
+        onClose={() => setDiagnosticOpen(false)}
+        connectionState={connectionState}
+        onRetry={handleRetry}
+      />
     </div>
   );
 }

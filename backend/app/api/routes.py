@@ -169,7 +169,7 @@ class GameStartRequest(BaseModel):
     game_name: str = Field(..., min_length=1, max_length=100)
 
 
-@router.post("/games/start")
+@router.post("/games/from-scenario")
 def start_game(request: GameStartRequest, db: Session = Depends(get_db)):
     """Start a new game from a scenario"""
     manager = ScenarioManager()
@@ -206,6 +206,21 @@ def get_game(game_id: int, db: Session = Depends(get_db)):
         "air_tasking_cycle": game.air_tasking_cycle,
         "logistics_cycle": game.logistics_cycle,
     }
+
+
+@router.post("/games/start")
+def start_game_endpoint(request: GameStartRequest, db: Session = Depends(get_db)):
+    """Start a new game from a scenario (alias for /games/from-scenario)"""
+    manager = ScenarioManager()
+    try:
+        result = manager.create_game_from_scenario(
+            request.scenario_id,
+            request.game_name,
+            db
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/games/{game_id}/units")

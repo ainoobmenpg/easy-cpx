@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import API from '../lib/api';
 import { useI18n } from '../lib/i18n';
 import LanguageSwitcher from '../lib/language-switcher';
+import { ConnectionBadge, DiagnosticModal, checkConnection, ConnectionState } from '../lib/connection-indicator';
 import { GameCardSkeleton } from '../components/Skeleton';
 import ErrorDisplay from '../components/ErrorDisplay';
 
@@ -25,6 +26,8 @@ export default function GamesPage() {
   const [games, setGames] = useState<GameSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [diagnosticOpen, setDiagnosticOpen] = useState(false);
+  const [connectionState, setConnectionState] = useState<ConnectionState>({ status: 'unknown' });
 
   useEffect(() => {
     fetch(API.games)
@@ -45,6 +48,19 @@ export default function GamesPage() {
         setLoading(false);
       });
   }, []);
+
+  // Check connection status on mount
+  useEffect(() => {
+    (async () => {
+      const result = await checkConnection();
+      setConnectionState(result);
+    })();
+  }, []);
+
+  const handleRetry = async () => {
+    const result = await checkConnection();
+    setConnectionState(result);
+  };
 
   const getPhaseLabel = (phase: string) => {
     const key = `phase.${phase}` as const;
@@ -81,18 +97,21 @@ export default function GamesPage() {
               {t('common.gameTitle')} - {t('games.title')}
             </h1>
             <div className="flex gap-3 items-center">
+              <ConnectionBadge onClick={() => setDiagnosticOpen(true)} />
               <LanguageSwitcher />
               <button
                 onClick={() => router.push('/scenarios')}
+                aria-label={t('common.newGame')}
                 className="text-sm bg-green-600 hover:bg-green-500 px-4 py-2 rounded transition-colors"
               >
-                新規ゲーム
+                {t('common.newGame')}
               </button>
               <button
                 onClick={() => router.push('/')}
+                aria-label={t('common.back')}
                 className="text-sm bg-gray-700/50 hover:bg-gray-600/50 px-4 py-2 rounded transition-colors"
               >
-                Back
+                {t('common.back')}
               </button>
             </div>
           </div>
@@ -117,13 +136,13 @@ export default function GamesPage() {
               onClick={() => router.push('/scenarios')}
               className="text-sm bg-green-600 hover:bg-green-500 px-4 py-2 rounded transition-colors"
             >
-              新規ゲーム
+              {t('common.newGame')}
             </button>
             <button
               onClick={() => router.push('/')}
               className="text-sm bg-gray-700/50 hover:bg-gray-600/50 px-4 py-2 rounded transition-colors"
             >
-              Back
+              {t('common.back')}
             </button>
           </div>
         </div>
@@ -157,18 +176,18 @@ export default function GamesPage() {
 
         {games.length === 0 ? (
           <div className="text-center py-16">
-            <p className="text-gray-400 text-lg mb-6">ゲームがありません</p>
+            <p className="text-gray-400 text-lg mb-6">{t('games.noGames')}</p>
             <button
               onClick={() => router.push('/scenarios')}
               className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-lg transition-colors"
             >
-              新しいゲームを開始
+              {t('games.newGame')}
             </button>
           </div>
         ) : (
           <>
             <p className="text-gray-400 mb-6 text-center">
-              既存のゲームを選択するか、新しいゲームを開始してください。
+              {t('games.selectOrCreate')}
             </p>
 
             <div className="space-y-4">
@@ -185,11 +204,11 @@ export default function GamesPage() {
                         {getStatusBadge(game)}
                       </div>
                       <div className="flex items-center gap-6 text-sm text-gray-400">
-                        <span>ターン: {game.current_turn}</span>
-                        <span>日付: {game.current_date}</span>
-                        <span>時刻: {game.current_time}</span>
-                        <span>天候: {getWeatherLabel(game.weather)}</span>
-                        <span>フェーズ: {getPhaseLabel(game.phase)}</span>
+                        <span>{t('games.turn')}: {game.current_turn}</span>
+                        <span>{t('games.date')}: {game.current_date}</span>
+                        <span>{t('games.time')}: {game.current_time}</span>
+                        <span>{t('games.weather')}: {getWeatherLabel(game.weather)}</span>
+                        <span>{t('games.phase')}: {getPhaseLabel(game.phase)}</span>
                       </div>
                     </div>
                     <div className="text-gray-500">
@@ -204,6 +223,12 @@ export default function GamesPage() {
           </>
         )}
       </main>
+      <DiagnosticModal
+        isOpen={diagnosticOpen}
+        onClose={() => setDiagnosticOpen(false)}
+        connectionState={connectionState}
+        onRetry={handleRetry}
+      />
     </div>
   );
 }

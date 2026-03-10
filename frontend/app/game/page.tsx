@@ -1,10 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo, useCallback, memo, Suspense } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import API from '../lib/api';
 import ReportPanel from '../lib/report-panel';
+import ChatPanel from '../lib/chat-panel';
 import { useI18n } from '../lib/i18n';
+import { useToast } from '../hooks/useToast';
+import ErrorDisplay, { LoadingDisplay } from '../components/ErrorDisplay';
 import { UnitMarker, getPhaseLinePath, getBoundaryPath, getAirspacePath, getControlMeasureDashArray, CONTROL_MEASURE_COLORS } from '../lib/app6';
 import type { Unit, GameState, Sitrep, TurnLog, PhaseLine as PhaseLineType, Boundary as BoundaryType, Airspace as AirspaceType } from '@shared/types';
 
@@ -21,6 +24,7 @@ const GRID_HEIGHT = 8;
 
 function GameContent() {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const searchParams = useSearchParams();
   const gameIdParam = searchParams.get('gameId');
   const router = useRouter();
@@ -45,7 +49,7 @@ function GameContent() {
   const [showLegend, setShowLegend] = useState(false);
   const [battleOdds, setBattleOdds] = useState<{ attacker: string; defender: string; odds: string; details: string } | null>(null);
   const [gameMode, setGameMode] = useState<'classic' | 'arcade'>('classic'); // Game mode: classic (text) or arcade (buttons)
-  const [activeTab, setActiveTab] = useState<'plan' | 'sync' | 'situation' | 'sustain'>('situation'); // Right sidebar tab
+  const [activeTab, setActiveTab] = useState<'plan' | 'sync' | 'situation' | 'sustain' | 'chat'>('situation'); // Right sidebar tab
   // OPORD state for SMESC editor
   const [opordData, setOpordData] = useState<any>(null);
   const [opordLoading, setOpordLoading] = useState(false);
@@ -80,7 +84,7 @@ function GameContent() {
           router.replace(`/game?gameId=${games[0].id}`);
         } else {
           // No games available, redirect to new game page
-          router.replace('/new-game');
+          router.replace('/games');
         }
       })
       .catch(() => {
@@ -125,6 +129,43 @@ function GameContent() {
           // M: Toggle mode (classic/arcade)
           setGameMode(prev => prev === 'classic' ? 'arcade' : 'classic');
           break;
+        case 'p':
+          // P: Toggle phase lines
+          setLayerVisibility(v => ({ ...v, phaseLines: !v.phaseLines }));
+          break;
+        case 'b':
+          // B: Toggle boundaries
+          setLayerVisibility(v => ({ ...v, boundaries: !v.boundaries }));
+          break;
+        case 'a':
+          // A: Toggle airspace
+          setLayerVisibility(v => ({ ...v, airspaces: !v.airspaces }));
+          break;
+        case '=':
+        case '+':
+          // +: Zoom in
+          setZoom(z => Math.min(3, z + 0.2));
+          break;
+        case '-':
+          // -: Zoom out
+          setZoom(z => Math.max(0.5, z - 0.2));
+          break;
+        case 'arrowup':
+          // Arrow up: Pan up
+          setPan(p => ({ ...p, y: p.y + 50 }));
+          break;
+        case 'arrowdown':
+          // Arrow down: Pan down
+          setPan(p => ({ ...p, y: p.y - 50 }));
+          break;
+        case 'arrowleft':
+          // Arrow left: Pan left
+          setPan(p => ({ ...p, x: p.x + 50 }));
+          break;
+        case 'arrowright':
+          // Arrow right: Pan right
+          setPan(p => ({ ...p, x: p.x - 50 }));
+          break;
       }
     };
 
@@ -144,6 +185,7 @@ function GameContent() {
       const msg = e instanceof Error ? e.message : 'Unknown error';
       console.error('Failed to fetch game state:', msg);
       setError(msg);
+      showToast(`Failed to load game: ${msg}`, 'error');
     }
   };
 
@@ -181,7 +223,11 @@ function GameContent() {
       setParsedOrder(null);
       setSelectedUnit(null);
       fetchGameState();
-    } catch (e) { console.error('Failed to submit order:', e); }
+      showToast(`Order submitted: ${parsedOrder.order_type}`, 'success');
+    } catch (e) {
+      console.error('Failed to submit order:', e);
+      showToast('Failed to submit order', 'error');
+    }
     setLoading(false);
   };
 
@@ -376,27 +422,56 @@ function GameContent() {
     }
   };
 
-  // Zoom with wheel
+  // Performance optimization: rAF for smooth pan/zoom (Issue #116)
+  const rafRef = useRef<number | null>(null);
+  const pendingPanRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Flush pending pan update via rAF
+  const flushPanUpdate = useCallback(() => {
+    if (pendingPanRef.current) {
+      setPan(pendingPanRef.current);
+      pendingPanRef.current = null;
+    }
+    rafRef.current = null;
+  }, []);
+
+  // Zoom with wheel - throttled with rAF
   const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
     const delta = e.deltaY > 0 ? -0.2 : 0.2;
     setZoom(z => Math.max(0.5, Math.min(3, z + delta)));
   }, []);
 
-  // Pan handlers - memoized
+  // Pan handlers - optimized with rAF for 60fps target
   const handlePanStart = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
     setIsPanning(true);
     setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-    setDidPan(false);  // Reset pan flag
+    setDidPan(false);
   }, [pan.x, pan.y]);
 
   const handlePan = useCallback((e: React.MouseEvent) => {
     if (!isPanning) return;
-    setDidPan(true);  // Mark that we actually panned
-    setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y });
-  }, [isPanning, panStart.x, panStart.y]);
+    e.preventDefault();
+    setDidPan(true);
+    const newPan = { x: e.clientX - panStart.x, y: e.clientY - panStart.y };
+
+    // Use rAF to batch updates for smooth 60fps
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(flushPanUpdate);
+    }
+    pendingPanRef.current = newPan;
+  }, [isPanning, panStart.x, panStart.y, flushPanUpdate]);
 
   const handlePanEnd = useCallback(() => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    if (pendingPanRef.current) {
+      setPan(pendingPanRef.current);
+      pendingPanRef.current = null;
+    }
     setIsPanning(false);
   }, []);
 
@@ -489,19 +564,19 @@ function GameContent() {
         let odds: string;
         let details: string;
         if (ratio >= 2) {
-          odds = '有利';
+          odds = t('battleOdds.advantageous');
           details = `${Math.round(playerStrength)} vs ${Math.round(enemyStrength)}`;
         } else if (ratio >= 1.2) {
-          odds = '稍有利';
+          odds = t('battleOdds.slightlyAdvantageous');
           details = `${Math.round(playerStrength)} vs ${Math.round(enemyStrength)}`;
         } else if (ratio >= 0.8) {
-          odds = '五分';
+          odds = t('battleOdds.even');
           details = `${Math.round(playerStrength)} vs ${Math.round(enemyStrength)}`;
         } else if (ratio >= 0.5) {
-          odds = '稍不利';
+          odds = t('battleOdds.slightlyDisadvantageous');
           details = `${Math.round(playerStrength)} vs ${Math.round(enemyStrength)}`;
         } else {
-          odds = '不利';
+          odds = t('battleOdds.disadvantageous');
           details = `${Math.round(playerStrength)} vs ${Math.round(enemyStrength)}`;
         }
 
@@ -629,13 +704,9 @@ function GameContent() {
   if (!gameState) return (
     <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white">
       {error ? (
-        <div className="bg-red-900/50 border border-red-500 text-red-200 p-4 rounded-lg">
-          <p className="font-bold">ゲーム読み込みエラー</p>
-          <p className="text-sm">{error}</p>
-          <button onClick={fetchGameState} aria-label="再試行" className="mt-2 px-4 py-1 bg-red-600 hover:bg-red-500 rounded text-sm">再試行</button>
-        </div>
+        <ErrorDisplay message={error} title={t('game.loadError')} onRetry={fetchGameState} />
       ) : (
-        <div>読み込み中...</div>
+        <LoadingDisplay message="戦術マップを読み込み中..." />
       )}
     </div>
   );
@@ -645,11 +716,11 @@ function GameContent() {
       {/* Header - compact */}
       <header className={`border-b border-gray-700/50 px-4 py-2 flex justify-between items-center shrink-0 backdrop-blur-sm ${gameState.is_night ? 'bg-slate-900/80' : 'bg-gray-800/80'}`}>
         <div className="flex items-center gap-4">
-          <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">作戦級CPX</h1>
-          <button onClick={() => router.push('/games')} aria-label="ゲーム一覧" className="text-xs bg-gray-700/50 hover:bg-gray-600/50 px-3 py-1 rounded backdrop-blur transition-colors">一覧</button>
-          <button onClick={() => setShowHelp(!showHelp)} aria-label="ヘルプ表示切替" aria-pressed={showHelp} className="text-xs bg-gray-700/50 hover:bg-gray-600/50 px-3 py-1 rounded backdrop-blur transition-colors">{showHelp ? 'ガイド' : '表示'}</button>
-          <button onClick={() => setGameMode(m => m === 'classic' ? 'arcade' : 'classic')} aria-label="モード切替" aria-pressed={gameMode === 'arcade'} className={`text-xs px-3 py-1 rounded backdrop-blur transition-colors font-medium ${gameMode === 'arcade' ? 'bg-purple-600/80 text-white' : 'bg-gray-700/50 hover:bg-gray-600/50'}`}>
-            {gameMode === 'classic' ? 'Classic' : 'Arcade'}
+          <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">{t('common.gameTitle')}</h1>
+          <button onClick={() => router.push('/games')} aria-label={t('game.gameList')} className="text-xs bg-gray-700/50 hover:bg-gray-600/50 px-3 py-1 rounded backdrop-blur transition-colors">{t('game.backToList')}</button>
+          <button onClick={() => setShowHelp(!showHelp)} aria-label={t('game.helpToggle')} aria-pressed={showHelp} className="text-xs bg-gray-700/50 hover:bg-gray-600/50 px-3 py-1 rounded backdrop-blur transition-colors">{showHelp ? t('common.guide') : t('common.display')}</button>
+          <button onClick={() => setGameMode(m => m === 'classic' ? 'arcade' : 'classic')} aria-label={t('game.modeToggle')} aria-pressed={gameMode === 'arcade'} className={`text-xs px-3 py-1 rounded backdrop-blur transition-colors font-medium ${gameMode === 'arcade' ? 'bg-purple-600/80 text-white' : 'bg-gray-700/50 hover:bg-gray-600/50'}`}>
+            {gameMode === 'classic' ? t('gameMode.classic') : t('gameMode.arcade')}
           </button>
         </div>
         <div className="flex gap-6 text-sm items-center">
@@ -673,6 +744,24 @@ function GameContent() {
               [偵察{Math.round(gameState.weather_effects.reconnaissance_modifier * 100)}%]
             </span>
           )}
+          {/* CPX-CYCLES: Cycle status display */}
+          {gameState.cycles && (
+            <div className="flex items-center gap-2 text-xs" title="Planning/Air/Logistics Cycles">
+              {(gameState.cycles.planning || gameState.cycles.air_tasking || gameState.cycles.logistics) && (
+                <>
+                  <span className={`px-1.5 py-0.5 rounded ${gameState.cycles.planning?.status === 'on_track' ? 'bg-green-900/50 text-green-400' : gameState.cycles.planning?.status === 'delayed' ? 'bg-yellow-900/50 text-yellow-400' : 'bg-red-900/50 text-red-400'}`}>
+                    P:{gameState.cycles.planning?.phase?.[0] || '-'}{gameState.cycles.planning?.deadline_turn || '-'}
+                  </span>
+                  <span className={`px-1.5 py-0.5 rounded ${gameState.cycles.air_tasking?.status === 'on_track' ? 'bg-green-900/50 text-green-400' : gameState.cycles.air_tasking?.status === 'delayed' ? 'bg-yellow-900/50 text-yellow-400' : 'bg-red-900/50 text-red-400'}`}>
+                    A:{gameState.cycles.air_tasking?.phase?.[0] || '-'}{gameState.cycles.air_tasking?.deadline_turn || '-'}
+                  </span>
+                  <span className={`px-1.5 py-0.5 rounded ${gameState.cycles.logistics?.status === 'on_track' ? 'bg-green-900/50 text-green-400' : gameState.cycles.logistics?.status === 'delayed' ? 'bg-yellow-900/50 text-yellow-400' : 'bg-red-900/50 text-red-400'}`}>
+                    L:{gameState.cycles.logistics?.phase?.[0] || '-'}{gameState.cycles.logistics?.deadline_turn || '-'}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
@@ -680,6 +769,7 @@ function GameContent() {
         <div className="bg-blue-900/30 border-b border-blue-700/50 px-4 py-1.5 text-xs shrink-0 backdrop-blur-sm">
           <span className="font-bold text-blue-300">遊び方: </span>
           <span>クリック→命令→ターン進行 | ズーム: Ctrl+ホイール or ボタン</span>
+          <span className="ml-3 text-gray-400">| ショートカット: Z=リセット L=凡例 H=ヘルプ M=モード P=PhaseLine B=Boundary A=Airspace 矢印=パン +/-=ズーム</span>
         </div>
       )}
 
@@ -687,7 +777,7 @@ function GameContent() {
       <div className="flex-1 flex flex-nowrap overflow-hidden">
         {/* Left: Units - expanded to 240px */}
         <div className="bg-gray-800/90 border-r border-gray-700/50 p-3 flex flex-col shrink-0 overflow-y-auto backdrop-blur-sm" style={{ width: '320px', minWidth: '320px', maxWidth: '320px' }}>
-          <h3 className="font-bold text-sm mb-3 text-blue-300 border-b border-gray-700/50 pb-2">■ ユニット</h3>
+          <h3 className="font-bold text-sm mb-3 text-blue-300 border-b border-gray-700/50 pb-2">{t('game.unitSection')}</h3>
           <div className="space-y-2">
             {gameState.units.map((unit) => (
               <div key={unit.id} onClick={() => setSelectedUnit(unit)}
@@ -698,7 +788,7 @@ function GameContent() {
                 </div>
                 <div className="text-gray-400 text-[10px] mt-1 flex items-center gap-2">
                   <span className="px-1.5 py-0.5 rounded bg-gray-800/50">{unit.type}</span>
-                  <span className={unit.side === 'player' ? 'text-blue-400' : 'text-red-400'}>{unit.side === 'player' ? '自軍' : '敵軍'}</span>
+                  <span className={unit.side === 'player' ? 'text-blue-400' : 'text-red-400'}>{unit.side === 'player' ? t('symbols.friend') : t('symbols.enemy')}</span>
                 </div>
               </div>
             ))}
@@ -711,10 +801,14 @@ function GameContent() {
             ref={containerRef}
             className="absolute inset-0 overflow-hidden"
             style={{ clipPath: 'inset(0 0 0 0)' }}
+            role="application"
+            aria-label={`Operational map - Zoom: ${Math.round(zoom * 100)}%, Pan: ${pan.x}, ${pan.y}. Use arrow keys to pan, +/- to zoom, Z to reset.`}
           >
             <svg
               viewBox={`0 0 ${GRID_WIDTH} ${GRID_HEIGHT}`}
               className="w-full h-full"
+              role="img"
+              aria-label={`Tactical map showing ${gameState.units?.length || 0} units`}
               style={{
                 background: gameState.is_night ? '#0f172a' : '#1e293b',
                 transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
@@ -808,15 +902,15 @@ function GameContent() {
           </div>
 
           {/* Layer Toggle Controls (top-left) */}
-          <div className="absolute top-3 left-3 bg-gray-900/80 backdrop-blur p-2 rounded-lg text-xs border border-gray-700/50 z-10 flex gap-2">
-            <span className="text-gray-400 font-medium mr-1">Layers:</span>
-            <button onClick={() => setLayerVisibility(v => ({ ...v, phaseLines: !v.phaseLines }))} aria-pressed={layerVisibility.phaseLines} className={`px-2 py-1 rounded transition-colors ${layerVisibility.phaseLines ? 'bg-green-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="Phase Lines">
+          <div className="absolute top-3 left-3 bg-gray-900/80 backdrop-blur p-2 rounded-lg text-xs border border-gray-700/50 z-10 flex gap-2" role="group" aria-label="Map layers">
+            <span className="text-gray-400 font-medium mr-1" id="layers-label">{t('game.layers')}:</span>
+            <button onClick={() => setLayerVisibility(v => ({ ...v, phaseLines: !v.phaseLines }))} aria-pressed={layerVisibility.phaseLines} aria-labelledby="layers-label" className={`px-2 py-1 rounded transition-colors ${layerVisibility.phaseLines ? 'bg-green-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="Phase Lines (P key)">
               PL
             </button>
-            <button onClick={() => setLayerVisibility(v => ({ ...v, boundaries: !v.boundaries }))} aria-pressed={layerVisibility.boundaries} className={`px-2 py-1 rounded transition-colors ${layerVisibility.boundaries ? 'bg-blue-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="Boundaries">
+            <button onClick={() => setLayerVisibility(v => ({ ...v, boundaries: !v.boundaries }))} aria-pressed={layerVisibility.boundaries} aria-labelledby="layers-label" className={`px-2 py-1 rounded transition-colors ${layerVisibility.boundaries ? 'bg-blue-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="Boundaries (B key)">
               Bdy
             </button>
-            <button onClick={() => setLayerVisibility(v => ({ ...v, airspaces: !v.airspaces }))} aria-pressed={layerVisibility.airspaces} className={`px-2 py-1 rounded transition-colors ${layerVisibility.airspaces ? 'bg-cyan-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="Airspace">
+            <button onClick={() => setLayerVisibility(v => ({ ...v, airspaces: !v.airspaces }))} aria-pressed={layerVisibility.airspaces} aria-labelledby="layers-label" className={`px-2 py-1 rounded transition-colors ${layerVisibility.airspaces ? 'bg-cyan-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="Airspace (A key)">
               Air
             </button>
           </div>
@@ -825,34 +919,34 @@ function GameContent() {
           <div className="absolute top-3 right-3 flex flex-col gap-1.5 z-10">
             <button onClick={handleZoomIn} aria-label="マップをzoom in" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-lg font-bold transition-colors border border-gray-600/30">+</button>
             <button onClick={handleZoomOut} aria-label="マップをzoom out" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-lg font-bold transition-colors border border-gray-600/30">−</button>
-            <button onClick={handleZoomReset} aria-label="ズームをリセット" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30">Reset</button>
-            <button onClick={() => setShowExactPosition(!showExactPosition)} aria-label="FoWデバッグ表示切替" aria-pressed={showExactPosition} className={`w-9 h-9 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30 ${showExactPosition ? 'bg-purple-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="FoW debug: Show exact positions">
+            <button onClick={handleZoomReset} aria-label={t('game.resetZoom')} className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30">{t('common.zoomReset')}</button>
+            <button onClick={() => setShowExactPosition(!showExactPosition)} aria-label={t('game.fowDebug')} aria-pressed={showExactPosition} className={`w-9 h-9 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30 ${showExactPosition ? 'bg-purple-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="FoW debug: Show exact positions">
               FoW
             </button>
-            <button onClick={() => setShowLegend(!showLegend)} aria-label="凡例表示切替" aria-pressed={showLegend} className={`w-9 h-9 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30 ${showLegend ? 'bg-cyan-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="Legend">
-              凡例
+            <button onClick={() => setShowLegend(!showLegend)} aria-label={t('game.legend')} aria-pressed={showLegend} className={`w-9 h-9 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30 ${showLegend ? 'bg-cyan-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="Legend">
+              {t('game.legend')}
             </button>
           </div>
 
           {/* Map Info - modern style */}
           <div className="absolute bottom-3 left-3 bg-gray-900/80 backdrop-blur p-2 rounded-lg text-xs border border-gray-700/50 z-10 flex gap-4">
-            <span className="text-blue-400 font-medium">自軍: {gameState.units.filter(u => u.side === 'player').length}</span>
-            <span className="text-red-400 font-medium">敵軍: {gameState.units.filter(u => u.side === 'enemy').length}</span>
-            <span className="text-gray-400">ズーム: {Math.round(zoom * 100)}%</span>
+            <span className="text-blue-400 font-medium">{t('symbols.friend')}: {gameState.units.filter(u => u.side === 'player').length}</span>
+            <span className="text-red-400 font-medium">{t('symbols.enemy')}: {gameState.units.filter(u => u.side === 'enemy').length}</span>
+            <span className="text-gray-400">{t('game.zoom')}: {Math.round(zoom * 100)}%</span>
           </div>
 
           {/* Legend Panel - Issue #41 */}
           {showLegend && (
             <div className="absolute top-3 left-3 bg-gray-900/95 backdrop-blur p-3 rounded-lg text-xs border border-cyan-700/50 z-20 shadow-xl">
-              <div className="font-bold text-cyan-300 mb-2 border-b border-gray-700/50 pb-1">凡例</div>
+              <div className="font-bold text-cyan-300 mb-2 border-b border-gray-700/50 pb-1">{t('game.legend')}</div>
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded bg-blue-500"></div>
-                  <span className="text-gray-300">自軍</span>
+                  <span className="text-gray-300">{t('symbols.friend')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded bg-red-500"></div>
-                  <span className="text-gray-300">敵軍</span>
+                  <span className="text-gray-300">{t('symbols.enemy')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-gray-400">✕ 歩兵</span>
@@ -887,17 +981,17 @@ function GameContent() {
           {/* Battle Odds Display - Issue #41 */}
           {battleOdds && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-gray-900/95 backdrop-blur p-3 rounded-lg text-xs border border-purple-700/50 z-20 shadow-xl">
-              <div className="font-bold text-purple-300 mb-1 text-center">戦闘オッドン</div>
+              <div className="font-bold text-purple-300 mb-1 text-center">{t('game.battleOddsTitle')}</div>
               <div className="flex items-center justify-center gap-3">
                 <span className="text-blue-400 font-medium">{battleOdds.attacker}</span>
                 <span className="text-gray-400">vs</span>
                 <span className="text-red-400 font-medium">{battleOdds.defender}</span>
               </div>
               <div className={`text-center font-bold mt-1 ${
-                battleOdds.odds === '有利' ? 'text-green-400' :
-                battleOdds.odds === '稍有利' ? 'text-lime-400' :
-                battleOdds.odds === '五分' ? 'text-yellow-400' :
-                battleOdds.odds === '稍不利' ? 'text-orange-400' :
+                battleOdds.odds === t('battleOdds.advantageous') ? 'text-green-400' :
+                battleOdds.odds === t('battleOdds.slightlyAdvantageous') ? 'text-lime-400' :
+                battleOdds.odds === t('battleOdds.even') ? 'text-yellow-400' :
+                battleOdds.odds === t('battleOdds.slightlyDisadvantageous') ? 'text-orange-400' :
                 'text-red-400'
               }`}>
                 {battleOdds.odds}
@@ -921,7 +1015,7 @@ function GameContent() {
                 <span className="text-lg" style={{ color: terrainTooltip.info.color }}>{terrainTooltip.info.symbol}</span>
                 <span className="font-bold text-gray-100">{terrainTooltip.info.name}</span>
               </div>
-              <div className="text-gray-400 text-[10px]">クリックで情報表示</div>
+              <div className="text-gray-400 text-[10px]">{t('game.clickForInfo')}</div>
             </div>
           )}
         </div>
@@ -934,6 +1028,7 @@ function GameContent() {
             <button onClick={() => setActiveTab('sync')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'sync' ? 'text-purple-300 border-purple-500 bg-purple-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>SYNC</button>
             <button onClick={() => setActiveTab('situation')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'situation' ? 'text-cyan-300 border-cyan-500 bg-cyan-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>SITUATION</button>
             <button onClick={() => setActiveTab('sustain')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'sustain' ? 'text-orange-300 border-orange-500 bg-orange-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>SUSTAIN</button>
+            <button onClick={() => setActiveTab('chat')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'chat' ? 'text-pink-300 border-pink-500 bg-pink-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>CHAT</button>
           </div>
 
           {/* SITREP Card - shown on info tab */}
@@ -948,13 +1043,13 @@ function GameContent() {
                 {sitrep.sections?.map((section, idx) => (
                   <div key={idx} className="bg-gray-800/50 rounded p-2">
                     <div className="text-gray-400 text-[10px] mb-1">
-                      {section.type === 'overview' && '戦況'}
-                      {section.type === 'unit_status' && '損害'}
-                      {section.type === 'enemy_activity' && '敵行動'}
-                      {section.type === 'logistics' && '補給'}
-                      {section.type === 'orders_result' && '命令結果'}
-                      {section.type === 'friction' && '摩擦'}
-                      {section.type === 'command' && '命令'}
+                      {section.type === 'overview' && t('sections.overview')}
+                      {section.type === 'unit_status' && t('sections.unitStatus')}
+                      {section.type === 'enemy_activity' && t('sections.enemyActivity')}
+                      {section.type === 'logistics' && t('sections.logistics')}
+                      {section.type === 'orders_result' && t('sections.ordersResult')}
+                      {section.type === 'friction' && t('sections.friction')}
+                      {section.type === 'command' && t('sections.command')}
                     </div>
                     <div className="text-gray-200 line-clamp-2">{section.content}</div>
                   </div>
@@ -981,7 +1076,7 @@ function GameContent() {
           {/* SITREP History Stack - shown on history tab */}
           {activeTab === 'situation' && (
             <div className="flex-1 overflow-y-auto p-3 space-y-3">
-              <h3 className="font-bold text-sm mb-3 text-cyan-300 border-b border-gray-700/50 pb-2">■ SITREP履歴スタック</h3>
+              <h3 className="font-bold text-sm mb-3 text-cyan-300 border-b border-gray-700/50 pb-2">{t('game.sitrepHistory')}</h3>
               {sitrepHistory.length > 0 ? (
                 <div className="space-y-3">
                   {sitrepHistory.map((histSitrep, idx) => (
@@ -1013,7 +1108,7 @@ function GameContent() {
                   ))}
                 </div>
               ) : (
-                <p className="text-gray-500 text-xs">ターン進行で履歴が追加されます</p>
+                <p className="text-gray-500 text-xs">{t('game.noHistory')}</p>
               )}
             </div>
           )}
@@ -1032,7 +1127,7 @@ function GameContent() {
               </div>
 
               {opordLoading ? (
-                <p className="text-gray-500 text-xs">読み込み中...</p>
+                <LoadingDisplay message="OPORD読み込み中..." className="py-4" />
               ) : opordData ? (
                 <div className="space-y-3 text-xs">
                   {/* Header */}
@@ -1052,13 +1147,13 @@ function GameContent() {
                           value={opordData.situation?.enemy_situation || ''}
                           onChange={(e) => setOpordData({...opordData, situation: {...opordData.situation, enemy_situation: e.target.value}})}
                           className="w-full bg-gray-900/50 rounded p-1 text-gray-300 text-[10px] h-12"
-                          placeholder="敵状況"
+                          placeholder={t('game.enemySituation')}
                         />
                         <textarea
                           value={opordData.situation?.friendly_situation || ''}
                           onChange={(e) => setOpordData({...opordData, situation: {...opordData.situation, friendly_situation: e.target.value}})}
                           className="w-full bg-gray-900/50 rounded p-1 text-gray-300 text-[10px] h-12"
-                          placeholder="味方状況"
+                          placeholder={t('game.friendlySituation')}
                         />
                       </div>
                     ) : (
@@ -1080,7 +1175,7 @@ function GameContent() {
                           value={opordData.mission?.task || ''}
                           onChange={(e) => setOpordData({...opordData, mission: {...opordData.mission, task: e.target.value}})}
                           className="w-full bg-gray-900/50 rounded p-1 text-gray-300 text-[10px] h-12"
-                          placeholder="任務"
+                          placeholder={t('game.mission')}
                         />
                       </div>
                     ) : (
@@ -1101,7 +1196,7 @@ function GameContent() {
                           value={opordData.execution?.concept_of_operations || ''}
                           onChange={(e) => setOpordData({...opordData, execution: {...opordData.execution, concept_of_operations: e.target.value}})}
                           className="w-full bg-gray-900/50 rounded p-1 text-gray-300 text-[10px] h-16"
-                          placeholder="作戦構想"
+                          placeholder={t('game.operationConcept')}
                         />
                       </div>
                     ) : (
@@ -1122,7 +1217,7 @@ function GameContent() {
                           value={opordData.coordination?.fire_support || ''}
                           onChange={(e) => setOpordData({...opordData, coordination: {...opordData.coordination, fire_support: e.target.value}})}
                           className="w-full bg-gray-900/50 rounded p-1 text-gray-300 text-[10px] h-12"
-                          placeholder="火力支援"
+                          placeholder={t('game.fireSupport')}
                         />
                       </div>
                     ) : (
@@ -1143,7 +1238,7 @@ function GameContent() {
                           value={opordData.service_support?.supply?.ammo || ''}
                           onChange={(e) => setOpordData({...opordData, service_support: {...opordData.service_support, supply: {...opordData.service_support?.supply, ammo: e.target.value}}})}
                           className="w-full bg-gray-900/50 rounded p-1 text-gray-300 text-[10px] h-12"
-                          placeholder="弾薬"
+                          placeholder={t('game.ammunition')}
                         />
                       </div>
                     ) : (
@@ -1279,6 +1374,12 @@ function GameContent() {
             </div>
           )}
 
+          {activeTab === 'chat' && gameId && (
+            <div className="flex-1 overflow-hidden">
+              <ChatPanel gameId={gameId} userRole="blue" />
+            </div>
+          )}
+
           {selectedUnit ? (
             <div className="p-3 border-b border-gray-700/50 bg-blue-900/20 shrink-0">
               <div className="flex justify-between items-center mb-2">
@@ -1386,9 +1487,9 @@ function GameContent() {
                   <textarea value={orderInput} onChange={(e) => setOrderInput(e.target.value)}
                     placeholder="命令を入力..." className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg p-2 text-xs h-16 mb-2 focus:border-blue-500 focus:outline-none backdrop-blur" />
                   <div className="flex gap-2">
-                    <button onClick={parseOrder} disabled={loading || !orderInput.trim()} aria-label="命令を解析" className="flex-1 bg-blue-600/80 hover:bg-blue-600 disabled:bg-gray-600/50 rounded-lg p-2 text-xs font-medium transition-colors">解析</button>
+                    <button onClick={parseOrder} disabled={loading || !orderInput.trim()} aria-label={t('game.parseOrder')} className="flex-1 bg-blue-600/80 hover:bg-blue-600 disabled:bg-gray-600/50 rounded-lg p-2 text-xs font-medium transition-colors">{t('commands.parse')}</button>
                     {parsedOrder && (
-                      <button onClick={submitOrder} disabled={loading} aria-label="命令を決定" className="flex-1 bg-green-600/80 hover:bg-green-600 disabled:bg-gray-600/50 rounded-lg p-2 text-xs font-medium transition-colors">決定</button>
+                      <button onClick={submitOrder} disabled={loading} aria-label={t('game.submitOrder')} className="flex-1 bg-green-600/80 hover:bg-green-600 disabled:bg-gray-600/50 rounded-lg p-2 text-xs font-medium transition-colors">{t('commands.submit')}</button>
                     )}
                   </div>
                 </>
@@ -1429,11 +1530,11 @@ function GameContent() {
 
           {/* Advance Turn */}
           <div className="p-3 border-t border-gray-700/50 shrink-0 bg-gray-800/50 space-y-2">
-            <button onClick={advanceTurn} disabled={loading} aria-label="ターン進行" className="w-full bg-purple-600/80 hover:bg-purple-600 disabled:bg-gray-600/50 rounded-lg p-3 text-sm font-bold transition-all shadow-lg shadow-purple-900/30">
-              ▶ ターン進行
+            <button onClick={advanceTurn} disabled={loading} aria-label={t('game.advanceTurn')} className="w-full bg-purple-600/80 hover:bg-purple-600 disabled:bg-gray-600/50 rounded-lg p-3 text-sm font-bold transition-all shadow-lg shadow-purple-900/30">
+              ▶ {t('commands.advanceTurn')}
             </button>
-            <button onClick={endGame} aria-label="ゲームを終了" className="w-full bg-red-900/50 hover:bg-red-800/50 border border-red-700/50 rounded-lg p-2 text-xs font-medium transition-colors">
-              End Mission / Debriefing
+            <button onClick={endGame} aria-label={t('game.endGame')} className="w-full bg-red-900/50 hover:bg-red-800/50 border border-red-700/50 rounded-lg p-2 text-xs font-medium transition-colors">
+              {t('debriefing.title')}
             </button>
           </div>
         </div>

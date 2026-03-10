@@ -159,6 +159,20 @@ export interface GameState {
     player: number;
     enemy: number;
   };
+  // CPX-CYCLES: Planning/Air/Logistics cycle status
+  cycles?: {
+    planning?: CycleState;
+    air_tasking?: CycleState;
+    logistics?: CycleState;
+  };
+}
+
+export interface CycleState {
+  phase: string;        // "planning" | "execution"
+  deadline_turn: number;
+  status: string;       // "on_track" | "delayed" | "failed"
+  last_updated: string;
+  cycle_type: string;
 }
 
 // Report Types - Standardized military report formats
