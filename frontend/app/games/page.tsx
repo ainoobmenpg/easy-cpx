@@ -3,6 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import API from '../lib/api';
+import { useI18n } from '../lib/i18n';
+import LanguageSwitcher from '../lib/language-switcher';
+import { GameCardSkeleton } from '../components/Skeleton';
+import ErrorDisplay from '../components/ErrorDisplay';
 
 interface GameSummary {
   id: number;
@@ -17,6 +21,7 @@ interface GameSummary {
 
 export default function GamesPage() {
   const router = useRouter();
+  const { t } = useI18n();
   const [games, setGames] = useState<GameSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,43 +41,32 @@ export default function GamesPage() {
       })
       .catch(err => {
         console.error('Failed to load games:', err);
-        setError('ゲームの読み込みに失敗しました');
+        setError(t('games.error'));
         setLoading(false);
       });
   }, []);
 
   const getPhaseLabel = (phase: string) => {
-    switch (phase) {
-      case 'orders': return '命令入力';
-      case 'adjudication': return '裁定中';
-      case 'sitrep': return 'SITREP表示';
-      default: return phase;
-    }
+    const key = `phase.${phase}` as const;
+    return t(key) || phase;
   };
 
   const getWeatherLabel = (weather: string) => {
-    switch (weather) {
-      case 'clear': return '快晴';
-      case 'cloudy': return '曇天';
-      case 'rain': return '雨天';
-      case 'storm': return '嵐';
-      case 'fog': return '霧';
-      case 'night': return '夜間';
-      default: return weather;
-    }
+    const key = `weather.${weather}` as const;
+    return t(key) || weather;
   };
 
   const getStatusBadge = (game: GameSummary) => {
     if (!game.is_active) {
-      return <span className="text-xs px-2 py-1 rounded bg-gray-600 text-gray-300">終了</span>;
+      return <span className="text-xs px-2 py-1 rounded bg-gray-600 text-gray-300">{t('games.status.ended')}</span>;
     }
     switch (game.phase) {
       case 'orders':
-        return <span className="text-xs px-2 py-1 rounded bg-blue-600 text-white">進行中</span>;
+        return <span className="text-xs px-2 py-1 rounded bg-blue-600 text-white">{t('games.status.active')}</span>;
       case 'adjudication':
-        return <span className="text-xs px-2 py-1 rounded bg-yellow-600 text-white">裁定中</span>;
+        return <span className="text-xs px-2 py-1 rounded bg-yellow-600 text-white">{t('games.status.adjudicating')}</span>;
       case 'sitrep':
-        return <span className="text-xs px-2 py-1 rounded bg-green-600 text-white">報告待ち</span>;
+        return <span className="text-xs px-2 py-1 rounded bg-green-600 text-white">{t('phase.sitrep')}</span>;
       default:
         return <span className="text-xs px-2 py-1 rounded bg-gray-600 text-gray-300">{game.phase}</span>;
     }
@@ -80,8 +74,32 @@ export default function GamesPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-blue-400 text-xl">ゲームを読み込み中...</div>
+      <div className="min-h-screen bg-gray-900">
+        <header className="bg-gray-800/90 border-b border-gray-700/50 px-6 py-4 backdrop-blur-sm">
+          <div className="max-w-6xl mx-auto flex justify-between items-center">
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
+              {t('common.gameTitle')} - {t('games.title')}
+            </h1>
+            <div className="flex gap-3 items-center">
+              <LanguageSwitcher />
+              <button
+                onClick={() => router.push('/scenarios')}
+                className="text-sm bg-green-600 hover:bg-green-500 px-4 py-2 rounded transition-colors"
+              >
+                新規ゲーム
+              </button>
+              <button
+                onClick={() => router.push('/')}
+                className="text-sm bg-gray-700/50 hover:bg-gray-600/50 px-4 py-2 rounded transition-colors"
+              >
+                Back
+              </button>
+            </div>
+          </div>
+        </header>
+        <main className="max-w-6xl mx-auto p-6 space-y-4">
+          {[1, 2, 3].map(i => <GameCardSkeleton key={i} />)}
+        </main>
       </div>
     );
   }
@@ -91,9 +109,10 @@ export default function GamesPage() {
       <header className="bg-gray-800/90 border-b border-gray-700/50 px-6 py-4 backdrop-blur-sm">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
-            作戦級CPX - ゲーム一覧
+            {t('common.gameTitle')} - {t('games.title')}
           </h1>
-          <div className="flex gap-3">
+          <div className="flex gap-3 items-center">
+            <LanguageSwitcher />
             <button
               onClick={() => router.push('/scenarios')}
               className="text-sm bg-green-600 hover:bg-green-500 px-4 py-2 rounded transition-colors"
@@ -112,9 +131,28 @@ export default function GamesPage() {
 
       <main className="max-w-6xl mx-auto p-6">
         {error && (
-          <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-6">
-            {error}
-          </div>
+          <ErrorDisplay
+            message={error}
+            title={t('games.errorTitle')}
+            onRetry={() => {
+              setError(null);
+              setLoading(true);
+              fetch(API.games)
+                .then(res => {
+                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                  return res.json();
+                })
+                .then(data => {
+                  setGames(Array.isArray(data) ? data : []);
+                  setLoading(false);
+                })
+                .catch(err => {
+                  setError(t('games.error'));
+                  setLoading(false);
+                });
+            }}
+            className="mb-6"
+          />
         )}
 
         {games.length === 0 ? (

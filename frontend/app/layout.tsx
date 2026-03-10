@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { I18nProvider } from './lib/i18n-provider';
+import { ToastProvider } from './hooks/useToast';
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,7 +17,9 @@ export default function RootLayout({
     <html lang="ja">
       <body className="antialiased">
         <I18nProvider>
-          {children}
+          <ToastProvider>
+            {children}
+          </ToastProvider>
         </I18nProvider>
       </body>
     </html>

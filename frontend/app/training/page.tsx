@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useI18n } from "../lib/i18n";
+import LanguageSwitcher from "../lib/language-switcher";
 
 interface TrainingMetrics {
   current_turn: number;
@@ -57,6 +59,7 @@ interface ScoreboardSummary {
 }
 
 export default function TrainingDashboard() {
+  const { t } = useI18n();
   const [gameId, setGameId] = useState<number>(1);
   const [metrics, setMetrics] = useState<TrainingMetrics | null>(null);
   const [summary, setSummary] = useState<ScoreboardSummary | null>(null);
@@ -215,14 +218,16 @@ export default function TrainingDashboard() {
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 p-6">
       <div className="max-w-7xl mx-auto">
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-100">
-            Training Scoreboard
-          </h1>
-          <p className="text-gray-400 mt-2">
-            CCIR Achievement / ROE Compliance / Casualty Efficiency / Time
-            Performance
-          </p>
+        <header className="mb-8 flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-100">
+              {t('training.title')}
+            </h1>
+            <p className="text-gray-400 mt-2">
+              CCIR Achievement / ROE Compliance / Casualty Efficiency / Time Performance
+            </p>
+          </div>
+          <LanguageSwitcher />
         </header>
 
         {!initialized && (

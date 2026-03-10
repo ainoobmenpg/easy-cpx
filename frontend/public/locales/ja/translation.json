@@ -89,9 +89,131 @@
     "draw": "引分",
     "defeat": "敗北"
   },
+  "games": {
+    "title": "ゲーム一覧",
+    "loading": "ゲームを読み込み中...",
+    "error": "ゲームの読み込みに失敗しました",
+    "noGames": "ゲームがありません",
+    "newGame": "新規ゲーム",
+    "continue": "再開",
+    "delete": "削除",
+    "status": {
+      "active": "進行中",
+      "ended": "終了",
+      "adjudicating": "裁定中"
+    }
+  },
+  "phase": {
+    "orders": "命令入力",
+    "adjudication": "裁定中",
+    "sitrep": "SITREP表示"
+  },
+  "weather": {
+    "clear": "快晴",
+    "cloudy": "曇天",
+    "rain": "雨天",
+    "storm": "嵐",
+    "fog": "霧",
+    "night": "夜間"
+  },
+  "difficulty": {
+    "easy": "簡単",
+    "normal": "普通",
+    "hard": "難しい"
+  },
+  "actions": {
+    "start": "開始",
+    "cancel": "キャンセル",
+    "close": "閉じる",
+    "confirm": "確認"
+  },
+  "labels": {
+    "mapSize": "マップサイズ",
+    "missionStart": "ミッション開始"
+  },
+  "training": {
+    "title": "トレーニング",
+    "selectMode": "モードを選択"
+  },
+  "debriefing": {
+    "title": "帰投報告",
+    "result": "結果",
+    "finalScore": "最終スコア",
+    "totalTurns": "総ターン数",
+    "enemyLosses": "敵損失",
+    "playerLosses": "自軍損失",
+    "playAgain": "もう一度プレイ",
+    "backToMenu": "メニューに戻る"
+  },
   "turn": "ターン",
   "score": "スコア",
   "player": "プレイヤー",
   "enemy": "敵軍",
-  "strikesRemaining": "残Strikes"
+  "strikesRemaining": "残Strikes",
+  "game": {
+    "loading": "読み込み中...",
+    "loadError": "ゲーム読み込みエラー",
+    "backToList": "一覧",
+    "howToPlay": "遊び方",
+    "howToPlayDesc": "クリック→命令→ターン進行 | ズーム: Ctrl+ホイール or ボタン",
+    "unit": "ユニット",
+    "playerForce": "自軍",
+    "enemyForce": "敵軍",
+    "estimatedPosition": "推定位置",
+    "newest": "最新",
+    "clickForInfo": "クリックで情報表示",
+    "combatLog": "戦闘ログ",
+    "latest3": "(最新3件)",
+    "allHistory": "(全履歴)",
+    "time": "時間",
+    "day": "昼",
+    "night": "夜",
+    "units": "部隊",
+    "zoom": "ズーム",
+    "commandSelect": "コマンドを選択:",
+    "pendingOrders": "保留中の命令",
+    "attackMove": "特攻",
+    "cannotAttackNextTurn": "(次ターン攻撃不可)",
+    "noOpord": "OPORDがありません。「編集」ボタンで作成してください。"
+  },
+  "opord": {
+    "title": "作戦計画",
+    "situation": "SITUATION（状況）",
+    "mission": "MISSION（任務）",
+    "execution": "EXECUTION（実行）",
+    "coordination": "COORDINATION（調整）",
+    "serviceSupport": "SERVICE SUPPORT（後方支援）",
+    "enemy": "敵",
+    "friendly": "味方",
+    "terrain": "地形",
+    "weather": "天候",
+    "task": "任務",
+    "purpose": "目的",
+    "endState": "終結",
+    "concept": "構想",
+    "coord": "調整",
+    "commandSignal": "通信",
+    "fireSupport": "火力",
+    "airSupport": "航空",
+    "c2": "指揮",
+    "ammo": "弾薬",
+    "fuel": "燃料",
+    "maintenance": "整備",
+    "medical": "衛生"
+  },
+  "unitInfo": {
+    "combatPower": "戦力",
+    "ammo": "弾薬",
+    "fuel": "燃料",
+    "maintenance": "整備",
+    "position": "位置"
+  },
+  "supply": {
+    "full": "満",
+    "depleted": "少",
+    "empty": "枯"
+  },
+  "statusLabel": {
+    "destroyed": "壊滅"
+  }
 }

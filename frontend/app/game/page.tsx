@@ -4,123 +4,23 @@ import { useState, useEffect, useRef, useMemo, useCallback, memo, Suspense } fro
 import { useSearchParams, useRouter } from 'next/navigation';
 import API from '../lib/api';
 import ReportPanel from '../lib/report-panel';
-import type { Unit, GameState, Sitrep, TurnLog } from '@shared/types';
+import { useI18n } from '../lib/i18n';
+import { UnitMarker, getPhaseLinePath, getBoundaryPath, getAirspacePath, getControlMeasureDashArray, CONTROL_MEASURE_COLORS } from '../lib/app6';
+import type { Unit, GameState, Sitrep, TurnLog, PhaseLine as PhaseLineType, Boundary as BoundaryType, Airspace as AirspaceType } from '@shared/types';
 
-// Memoized Unit component for performance
-// FoW display: show exact position marker and UI position marker separately
-const UnitMarker = memo(function UnitMarker({
-  unit,
-  selectedUnitId,
-  onSelect,
-  showExactPosition = false
-}: {
-  unit: Unit;
-  selectedUnitId: number | null;
-  onSelect: (unit: Unit) => void;
-  showExactPosition?: boolean; // Show exact position marker (for internal/debug view)
-}) {
-  // FoW: Determine displayed position based on observation confidence
-  const isEnemy = unit.side === 'enemy';
-  const confidence = unit.observation_confidence;
-  const hasEstimatedPosition = isEnemy && (confidence === 'unknown' || confidence === 'estimated') &&
-    unit.estimated_x !== undefined && unit.estimated_y !== undefined;
-
-  // UI display position (what player sees)
-  const displayX = hasEstimatedPosition ? unit.estimated_x! : unit.x;
-  const displayY = hasEstimatedPosition ? unit.estimated_y! : unit.y;
-
-  // Exact position (true position - for internal use)
-  const exactX = unit.x;
-  const exactY = unit.y;
-
-  const svgX = Math.floor(displayX) + 0.5;
-  const svgY = Math.floor(displayY) + 0.5;
-  const exactSvgX = Math.floor(exactX) + 0.5;
-  const exactSvgY = Math.floor(exactY) + 0.5;
-  const sideColor = unit.side === 'player' ? '#3b82f6' : '#ef4444';
-  const isSelected = selectedUnitId === unit.id;
-
-  // NATO symbol map
-  const typeMap: Record<string, string> = {
-    'nato_infantry': 'infantry', 'nato_armor': 'armor', 'nato_artillery': 'artillery',
-    'nato_multirole': 'reconnaissance', 'nato_air_defense': 'air_defense', 'nato_uav': 'uav',
-    'wp_infantry': 'infantry', 'wp_armor': 'armor', 'wp_artillery': 'artillery',
-    'wp_air_defense': 'air_defense', 'wp_uav': 'uav', 'infantry': 'infantry', 'armor': 'armor',
-    'artillery': 'artillery', 'reconnaissance': 'reconnaissance', 'air_defense': 'air_defense',
-    'uav': 'uav',
-  };
-  const symbols: Record<string, string> = {
-    infantry: '✕', armor: '⇒', artillery: '+', reconnaissance: '◇', air_defense: '▲', uav: '◈',
-  };
-  const symbol = symbols[typeMap[unit.type] || 'infantry'];
-
-  // Status color
-  const statusColors: Record<string, string> = {
-    intact: '#22c55e', light_damage: '#eab308', medium_damage: '#f97316',
-    heavy_damage: '#ef4444', destroyed: '#6b7280'
-  };
-  const statusColor = statusColors[unit.status] || '#22c55e';
-
-  // Observation confidence styling for enemy units - FoW display
-  const confidenceScore = unit.confidence_score;
-  let confidenceOpacity = 1.0;
-  let confidenceBorder = false;
-  let confidenceLabel = '';
-  let isEstimatedMarker = false; // Show different marker for estimated position
-
-  if (isEnemy && confidence) {
-    if (confidence === 'unknown') {
-      confidenceOpacity = 0.5; // Unknown - more transparent
-      confidenceBorder = true;
-      confidenceLabel = confidenceScore !== undefined ? `${confidenceScore}%` : '?';
-      isEstimatedMarker = hasEstimatedPosition;
-    } else if (confidence === 'estimated') {
-      confidenceOpacity = 0.75; // Estimated - slightly transparent
-      confidenceBorder = true;
-      confidenceLabel = confidenceScore !== undefined ? `${confidenceScore}%` : '~';
-      isEstimatedMarker = hasEstimatedPosition;
-    } else {
-      // confirmed - fully opaque, no border
-      confidenceLabel = confidenceScore !== undefined ? `${confidenceScore}%` : 'OK';
-    }
-  }
-
-  // FoW marker: different symbol for estimated position
-  const markerSymbol = isEstimatedMarker ? '?' : symbol;
-
-  return (
-    <g onClick={() => onSelect(unit)} style={{ cursor: 'pointer' }}>
-      {/* Exact position marker - shown when showExactPosition is true (for internal/debug view) */}
-      {showExactPosition && isEnemy && (
-        <g>
-          <circle cx={exactSvgX} cy={exactSvgY} r="0.5" fill="none" stroke="#ff00ff" strokeWidth="0.15" strokeDasharray="0.15,0.1" opacity={0.8} />
-          <text x={exactSvgX - 0.8} y={exactSvgY - 0.6} fontSize="0.35" fill="#ff00ff" fontWeight="bold" opacity={0.9}>
-            EXACT
-          </text>
-        </g>
-      )}
-      {/* FoW estimated position marker - dashed circle */}
-      {isEstimatedMarker && (
-        <circle cx={svgX} cy={svgY} r="0.7" fill="none" stroke="#fbbf24" strokeWidth="0.1" strokeDasharray="0.2,0.1" opacity={confidenceOpacity * 0.7} />
-      )}
-      <rect x={svgX - 0.6} y={svgY - 0.5} width="1.2" height="1.0"
-        fill={sideColor} stroke={isSelected ? '#fff' : (confidenceBorder ? '#fbbf24' : 'none')} strokeWidth="0.1" opacity={confidenceOpacity * 0.95}/>
-      <text x={svgX} y={svgY + 0.2} fontSize="0.8" fill="#fff" textAnchor="middle" fontWeight="bold" opacity={confidenceOpacity}>
-        {markerSymbol}
-      </text>
-      <text x={svgX + 0.8} y={svgY + 0.8} fontSize="0.5" fill="#fff" stroke="#000" strokeWidth="0.15" paintOrder="stroke" fontWeight="bold" opacity={confidenceOpacity}>
-        {unit.name}{confidenceLabel ? ` (${confidenceLabel})` : ''}
-      </text>
-      <rect x={svgX + 0.4} y={svgY + 0.4} width="0.3" height="0.2" fill={statusColor} stroke="#000" strokeWidth="0.05" opacity={confidenceOpacity}/>
-    </g>
-  );
-});
+// Control measures layer visibility state
+interface LayerVisibility {
+  phaseLines: boolean;
+  boundaries: boolean;
+  airspaces: boolean;
+}
 
 // Grid constants - 12x8 fixed grid per Issue #41
 const GRID_WIDTH = 12;
 const GRID_HEIGHT = 8;
 
 function GameContent() {
+  const { t } = useI18n();
   const searchParams = useSearchParams();
   const gameIdParam = searchParams.get('gameId');
   const router = useRouter();
@@ -136,11 +36,16 @@ function GameContent() {
   const [turnLogs, setTurnLogs] = useState<TurnLog[]>([]);
   const [zoom, setZoom] = useState(1);
   const [showExactPosition, setShowExactPosition] = useState(false); // FoW debug: show exact position markers
+  const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({
+    phaseLines: true,
+    boundaries: true,
+    airspaces: true
+  });
   const [error, setError] = useState<string | null>(null);
   const [showLegend, setShowLegend] = useState(false);
   const [battleOdds, setBattleOdds] = useState<{ attacker: string; defender: string; odds: string; details: string } | null>(null);
   const [gameMode, setGameMode] = useState<'classic' | 'arcade'>('classic'); // Game mode: classic (text) or arcade (buttons)
-  const [activeTab, setActiveTab] = useState<'info' | 'logs' | 'history' | 'opord' | 'reports'>('info'); // Right sidebar tab
+  const [activeTab, setActiveTab] = useState<'plan' | 'sync' | 'situation' | 'sustain'>('situation'); // Right sidebar tab
   // OPORD state for SMESC editor
   const [opordData, setOpordData] = useState<any>(null);
   const [opordLoading, setOpordLoading] = useState(false);
@@ -189,6 +94,43 @@ function GameContent() {
       fetchGameState();
     }
   }, [gameId]);
+
+  // Issue #115: Keyboard shortcuts for accessibility
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if user is typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      // Ignore if Ctrl/Cmd key is pressed (browser shortcuts)
+      if (e.ctrlKey || e.metaKey) {
+        return;
+      }
+
+      switch (e.key.toLowerCase()) {
+        case 'z':
+          // Z: Zoom reset
+          setZoom(1);
+          setPan({ x: 0, y: 0 });
+          break;
+        case 'l':
+          // L: Toggle legend
+          setShowLegend(prev => !prev);
+          break;
+        case 'h':
+          // H: Toggle help
+          setShowHelp(prev => !prev);
+          break;
+        case 'm':
+          // M: Toggle mode (classic/arcade)
+          setGameMode(prev => prev === 'classic' ? 'arcade' : 'classic');
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const fetchGameState = async () => {
     if (gameId === null) return;
@@ -586,10 +528,23 @@ function GameContent() {
   };
   const getSideColor = (side: string) => side === 'player' ? '#3b82f6' : '#ef4444';
   const getStatusLabel = (status: string) => {
-    const labels: Record<string, string> = { intact: '無傷', light_damage: '軽損', medium_damage: '中損', heavy_damage: '大損', destroyed: '壊滅' };
+    const labels: Record<string, string> = {
+      intact: t('status.intact'),
+      light_damage: t('status.lightDamage'),
+      medium_damage: t('status.moderateDamage'),
+      heavy_damage: t('status.heavyDamage'),
+      destroyed: t('status.destroyed')
+    };
     return labels[status] || status;
   };
-  const getSupplyLabel = (level: string) => { const labels: Record<string, string> = { full: '満', depleted: '少', exhausted: '枯' }; return labels[level] || level; };
+  const getSupplyLabel = (level: string) => {
+    const labels: Record<string, string> = {
+      full: t('status.full'),
+      depleted: t('status.depleted'),
+      exhausted: t('status.exhausted')
+    };
+    return labels[level] || level;
+  };
   const getOutcomeIcon = (outcome: string, unitName?: string) => {
     const icons: Record<string, string> = {
       success: '✅', partial: '⚠️', failed: '❌', blocked: '🚫', cancelled: '⏸️',
@@ -692,8 +647,8 @@ function GameContent() {
         <div className="flex items-center gap-4">
           <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">作戦級CPX</h1>
           <button onClick={() => router.push('/games')} aria-label="ゲーム一覧" className="text-xs bg-gray-700/50 hover:bg-gray-600/50 px-3 py-1 rounded backdrop-blur transition-colors">一覧</button>
-          <button onClick={() => setShowHelp(!showHelp)} aria-label="ヘルプ表示切替" className="text-xs bg-gray-700/50 hover:bg-gray-600/50 px-3 py-1 rounded backdrop-blur transition-colors">{showHelp ? 'ガイド' : '表示'}</button>
-          <button onClick={() => setGameMode(m => m === 'classic' ? 'arcade' : 'classic')} aria-label="モード切替" className={`text-xs px-3 py-1 rounded backdrop-blur transition-colors font-medium ${gameMode === 'arcade' ? 'bg-purple-600/80 text-white' : 'bg-gray-700/50 hover:bg-gray-600/50'}`}>
+          <button onClick={() => setShowHelp(!showHelp)} aria-label="ヘルプ表示切替" aria-pressed={showHelp} className="text-xs bg-gray-700/50 hover:bg-gray-600/50 px-3 py-1 rounded backdrop-blur transition-colors">{showHelp ? 'ガイド' : '表示'}</button>
+          <button onClick={() => setGameMode(m => m === 'classic' ? 'arcade' : 'classic')} aria-label="モード切替" aria-pressed={gameMode === 'arcade'} className={`text-xs px-3 py-1 rounded backdrop-blur transition-colors font-medium ${gameMode === 'arcade' ? 'bg-purple-600/80 text-white' : 'bg-gray-700/50 hover:bg-gray-600/50'}`}>
             {gameMode === 'classic' ? 'Classic' : 'Arcade'}
           </button>
         </div>
@@ -810,7 +765,60 @@ function GameContent() {
               {unitList.map((unit) => (
                 <UnitMarker key={unit.id} unit={unit} selectedUnitId={selectedUnit?.id || null} onSelect={handleUnitSelect} showExactPosition={showExactPosition} />
               ))}
+              {/* Control Measures - Phase Lines */}
+              {layerVisibility.phaseLines && (gameState as any)?.control_measures?.phase_lines?.map((pl: PhaseLineType) => (
+                <g key={`pl-${pl.id}`}>
+                  <path
+                    d={getPhaseLinePath(pl.points as any)}
+                    stroke={pl.status === 'reported' ? CONTROL_MEASURE_COLORS.phaseLine.reported : pl.status === 'contact' ? CONTROL_MEASURE_COLORS.phaseLine.contact : CONTROL_MEASURE_COLORS.phaseLine.lost}
+                    strokeWidth="0.15"
+                    fill="none"
+                    strokeDasharray={getControlMeasureDashArray(pl.line_style)}
+                  />
+                  <text x={pl.points[0]?.x || 0} y={(pl.points[0]?.y || 0) - 0.3} fontSize="0.4" fill={pl.status === 'reported' ? CONTROL_MEASURE_COLORS.phaseLine.reported : pl.status === 'contact' ? CONTROL_MEASURE_COLORS.phaseLine.contact : CONTROL_MEASURE_COLORS.phaseLine.lost} fontWeight="bold">
+                    {pl.name}
+                  </text>
+                </g>
+              ))}
+              {/* Control Measures - Boundaries */}
+              {layerVisibility.boundaries && (gameState as any)?.control_measures?.boundaries?.map((b: BoundaryType) => (
+                <g key={`boundary-${b.id}`}>
+                  <path
+                    d={getBoundaryPath(b.points as any)}
+                    stroke={b.owning_side === 'player' ? CONTROL_MEASURE_COLORS.boundary.player : b.owning_side === 'enemy' ? CONTROL_MEASURE_COLORS.boundary.enemy : CONTROL_MEASURE_COLORS.boundary.neutral}
+                    strokeWidth="0.12"
+                    fill="none"
+                    strokeDasharray={getControlMeasureDashArray(b.line_style)}
+                  />
+                </g>
+              ))}
+              {/* Control Measures - Airspaces */}
+              {layerVisibility.airspaces && (gameState as any)?.control_measures?.airspaces?.map((as: AirspaceType) => (
+                <g key={`airspace-${as.id}`}>
+                  <path
+                    d={getAirspacePath(as.points as any)}
+                    stroke={as.type === 'air_corridor' ? CONTROL_MEASURE_COLORS.airspace.air_corridor : as.type === 'restricted' ? CONTROL_MEASURE_COLORS.airspace.restricted : as.type === 'ada_zone' ? CONTROL_MEASURE_COLORS.airspace.ada_zone : CONTROL_MEASURE_COLORS.airspace.no_fly}
+                    strokeWidth="0.1"
+                    fill={as.type === 'air_corridor' ? `${CONTROL_MEASURE_COLORS.airspace.air_corridor}20` : as.type === 'restricted' ? `${CONTROL_MEASURE_COLORS.airspace.restricted}20` : as.type === 'ada_zone' ? `${CONTROL_MEASURE_COLORS.airspace.ada_zone}20` : `${CONTROL_MEASURE_COLORS.airspace.no_fly}20`}
+                    fillRule="evenodd"
+                  />
+                </g>
+              ))}
             </svg>
+          </div>
+
+          {/* Layer Toggle Controls (top-left) */}
+          <div className="absolute top-3 left-3 bg-gray-900/80 backdrop-blur p-2 rounded-lg text-xs border border-gray-700/50 z-10 flex gap-2">
+            <span className="text-gray-400 font-medium mr-1">Layers:</span>
+            <button onClick={() => setLayerVisibility(v => ({ ...v, phaseLines: !v.phaseLines }))} aria-pressed={layerVisibility.phaseLines} className={`px-2 py-1 rounded transition-colors ${layerVisibility.phaseLines ? 'bg-green-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="Phase Lines">
+              PL
+            </button>
+            <button onClick={() => setLayerVisibility(v => ({ ...v, boundaries: !v.boundaries }))} aria-pressed={layerVisibility.boundaries} className={`px-2 py-1 rounded transition-colors ${layerVisibility.boundaries ? 'bg-blue-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="Boundaries">
+              Bdy
+            </button>
+            <button onClick={() => setLayerVisibility(v => ({ ...v, airspaces: !v.airspaces }))} aria-pressed={layerVisibility.airspaces} className={`px-2 py-1 rounded transition-colors ${layerVisibility.airspaces ? 'bg-cyan-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="Airspace">
+              Air
+            </button>
           </div>
 
           {/* Map Controls (outside clipped area) - modern glass style */}
@@ -818,10 +826,10 @@ function GameContent() {
             <button onClick={handleZoomIn} aria-label="マップをzoom in" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-lg font-bold transition-colors border border-gray-600/30">+</button>
             <button onClick={handleZoomOut} aria-label="マップをzoom out" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-lg font-bold transition-colors border border-gray-600/30">−</button>
             <button onClick={handleZoomReset} aria-label="ズームをリセット" className="w-9 h-9 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30">Reset</button>
-            <button onClick={() => setShowExactPosition(!showExactPosition)} aria-label="FoWデバッグ表示切替" className={`w-9 h-9 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30 ${showExactPosition ? 'bg-purple-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="FoW debug: Show exact positions">
+            <button onClick={() => setShowExactPosition(!showExactPosition)} aria-label="FoWデバッグ表示切替" aria-pressed={showExactPosition} className={`w-9 h-9 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30 ${showExactPosition ? 'bg-purple-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="FoW debug: Show exact positions">
               FoW
             </button>
-            <button onClick={() => setShowLegend(!showLegend)} aria-label="凡例表示切替" className={`w-9 h-9 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30 ${showLegend ? 'bg-cyan-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="Legend">
+            <button onClick={() => setShowLegend(!showLegend)} aria-label="凡例表示切替" aria-pressed={showLegend} className={`w-9 h-9 backdrop-blur rounded-lg text-xs font-medium transition-colors border border-gray-600/30 ${showLegend ? 'bg-cyan-600/80 text-white' : 'bg-gray-700/80 text-gray-400'}`} title="Legend">
               凡例
             </button>
           </div>
@@ -920,17 +928,16 @@ function GameContent() {
 
         {/* Right: Orders + Logs - expanded to 320px */}
         <div className="bg-gray-800/90 border-l border-gray-700/50 flex flex-col shrink-0 overflow-hidden backdrop-blur-sm" style={{ width: '400px', minWidth: '400px', maxWidth: '400px' }}>
-          {/* Tab system */}
+          {/* Tab system - CPX 4 tabs */}
           <div className="flex border-b border-gray-700/50 shrink-0">
-            <button onClick={() => setActiveTab('info')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'info' ? 'text-blue-300 border-blue-500 bg-blue-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>情報</button>
-            <button onClick={() => setActiveTab('history')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'history' ? 'text-blue-300 border-blue-500 bg-blue-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>履歴</button>
-            <button onClick={() => setActiveTab('logs')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'logs' ? 'text-blue-300 border-blue-500 bg-blue-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>ログ</button>
-            <button onClick={() => { setActiveTab('opord'); fetchOpord(); }} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'opord' ? 'text-green-300 border-green-500 bg-green-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>OPORD</button>
-            <button onClick={() => setActiveTab('reports')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'reports' ? 'text-yellow-300 border-yellow-500 bg-yellow-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>REPORTS</button>
+            <button onClick={() => { setActiveTab('plan'); fetchOpord(); }} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'plan' ? 'text-green-300 border-green-500 bg-green-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>PLAN</button>
+            <button onClick={() => setActiveTab('sync')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'sync' ? 'text-purple-300 border-purple-500 bg-purple-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>SYNC</button>
+            <button onClick={() => setActiveTab('situation')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'situation' ? 'text-cyan-300 border-cyan-500 bg-cyan-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>SITUATION</button>
+            <button onClick={() => setActiveTab('sustain')} className={`flex-1 p-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'sustain' ? 'text-orange-300 border-orange-500 bg-orange-900/20' : 'text-gray-400 hover:text-gray-300 border-transparent'}`}>SUSTAIN</button>
           </div>
 
           {/* SITREP Card - shown on info tab */}
-          {activeTab === 'info' && sitrep && (
+          {activeTab === 'situation' && sitrep && (
             <div className="p-3 border-b border-gray-700/50 bg-gradient-to-r from-blue-900/30 to-purple-900/30 shrink-0">
               <div className="flex justify-between items-center mb-2">
                 <span className="font-bold text-sm text-cyan-300">■ SITREP T{sitrep.turn}</span>
@@ -957,7 +964,7 @@ function GameContent() {
           )}
 
           {/* SITREP History - previous sitreps */}
-          {activeTab === 'info' && sitrepHistory.length > 0 && (
+          {activeTab === 'situation' && sitrepHistory.length > 0 && (
             <div className="p-2 border-b border-gray-700/50 bg-gray-800/30 shrink-0">
               <div className="text-[10px] text-gray-500 mb-1">履歴</div>
               <div className="flex gap-1 overflow-x-auto">
@@ -972,7 +979,7 @@ function GameContent() {
           )}
 
           {/* SITREP History Stack - shown on history tab */}
-          {activeTab === 'history' && (
+          {activeTab === 'situation' && (
             <div className="flex-1 overflow-y-auto p-3 space-y-3">
               <h3 className="font-bold text-sm mb-3 text-cyan-300 border-b border-gray-700/50 pb-2">■ SITREP履歴スタック</h3>
               {sitrepHistory.length > 0 ? (
@@ -1012,7 +1019,7 @@ function GameContent() {
           )}
 
           {/* OPORD Tab - SMESC format */}
-          {activeTab === 'opord' && (
+          {activeTab === 'plan' && (
             <div className="flex-1 overflow-y-auto p-3 space-y-3">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-bold text-sm text-green-300 border-b border-gray-700/50 pb-2">■ OPORD/FRAGO (SMESC)</h3>
@@ -1166,7 +1173,107 @@ function GameContent() {
           )}
 
           {/* Reports Tab - CPX-REPORTS */}
-          {activeTab === 'reports' && gameId && (
+
+          {/* SYNC Tab - Synchronization Matrix (Mock) */}
+          {activeTab === 'sync' && (
+            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+              <h3 className="font-bold text-sm text-purple-300 border-b border-gray-700/50 pb-2">■ SYNCHRONIZATION MATRIX</h3>
+
+              <div className="bg-gray-800/50 rounded p-3 border border-gray-700/30">
+                <div className="font-bold text-xs text-purple-300 mb-2">FIRE SUPPORT COORDINATION</div>
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between"><span className="text-gray-400">Artillery:</span><span className="text-green-400">Available</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400">Air Strike:</span><span className="text-yellow-400">On Call</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400">Naval Fire:</span><span className="text-red-400">Unavailable</span></div>
+                </div>
+              </div>
+
+              <div className="bg-gray-800/50 rounded p-3 border border-gray-700/30">
+                <div className="font-bold text-xs text-purple-300 mb-2">MOVEMENT SYNCHRONIZATION</div>
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between"><span className="text-gray-400">Phase Line A:</span><span className="text-green-400">Cleared</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400">Phase Line B:</span><span className="text-yellow-400">In Progress</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400">Objective:</span><span className="text-gray-400">Pending</span></div>
+                </div>
+              </div>
+
+              <div className="bg-gray-800/50 rounded p-3 border border-gray-700/30">
+                <div className="font-bold text-xs text-purple-300 mb-2">C2 RELATIONSHIPS</div>
+                <div className="space-y-1 text-xs">
+                  <div><span className="text-gray-400">Higher HQ:</span> Corps</div>
+                  <div><span className="text-gray-400">Left:</span> 3rd Bde</div>
+                  <div><span className="text-gray-400">Right:</span> 5th Bde</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SUSTAIN Tab - Logistics (Mock) */}
+          {activeTab === 'sustain' && gameState && (
+            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+              <h3 className="font-bold text-sm text-orange-300 border-b border-gray-700/50 pb-2">■ LOGISTICS STATUS</h3>
+
+              {/* Ammunition */}
+              <div className="bg-gray-800/50 rounded p-3 border border-gray-700/30">
+                <div className="font-bold text-xs text-orange-300 mb-2">AMMUNITION</div>
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <div className="flex justify-between mb-1"><span className="text-gray-400"> Artillery (HE):</span><span className="text-green-400">75%</span></div>
+                    <div className="w-full h-2 bg-gray-700 rounded-full"><div className="h-full bg-green-500 rounded-full" style={{width: '75%'}}></div></div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between mb-1"><span className="text-gray-400"> Artillery (Illum):</span><span className="text-yellow-400">45%</span></div>
+                    <div className="w-full h-2 bg-gray-700 rounded-full"><div className="h-full bg-yellow-500 rounded-full" style={{width: '45%'}}></div></div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between mb-1"><span className="text-gray-400"> Small Arms:</span><span className="text-green-400">90%</span></div>
+                    <div className="w-full h-2 bg-gray-700 rounded-full"><div className="h-full bg-green-500 rounded-full" style={{width: '90%'}}></div></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Fuel */}
+              <div className="bg-gray-800/50 rounded p-3 border border-gray-700/30">
+                <div className="font-bold text-xs text-orange-300 mb-2">FUEL</div>
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <div className="flex justify-between mb-1"><span className="text-gray-400"> Motor Transport:</span><span className="text-green-400">80%</span></div>
+                    <div className="w-full h-2 bg-gray-700 rounded-full"><div className="h-full bg-green-500 rounded-full" style={{width: '80%'}}></div></div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between mb-1"><span className="text-gray-400"> Armor:</span><span className="text-yellow-400">55%</span></div>
+                    <div className="w-full h-2 bg-gray-700 rounded-full"><div className="h-full bg-yellow-500 rounded-full" style={{width: '55%'}}></div></div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between mb-1"><span className="text-gray-400"> Aviation:</span><span className="text-green-400">70%</span></div>
+                    <div className="w-full h-2 bg-gray-700 rounded-full"><div className="h-full bg-green-500 rounded-full" style={{width: '70%'}}></div></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Maintenance */}
+              <div className="bg-gray-800/50 rounded p-3 border border-gray-700/30">
+                <div className="font-bold text-xs text-orange-300 mb-2">MAINTENANCE</div>
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between"><span className="text-gray-400"> Equipment Ready:</span><span className="text-green-400">85%</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400"> Under Repair:</span><span className="text-yellow-400">12%</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400"> Await Parts:</span><span className="text-red-400">3%</span></div>
+                </div>
+              </div>
+
+              {/* Casualties */}
+              <div className="bg-gray-800/50 rounded p-3 border border-gray-700/30">
+                <div className="font-bold text-xs text-orange-300 mb-2">CASUALTIES</div>
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between"><span className="text-gray-400"> KIA:</span><span className="text-red-400">12</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400"> WIA:</span><span className="text-yellow-400">34</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400"> MIA:</span><span className="text-gray-400">2</span></div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'situation' && gameId && (
             <div className="flex-1 overflow-y-auto">
               <ReportPanel gameId={gameId} turn={gameState?.turn || 1} />
             </div>
@@ -1300,10 +1407,10 @@ function GameContent() {
 
           {/* Battle Logs - show on both tabs but different amount */}
           <div className="flex-1 overflow-y-auto p-3">
-            <h3 className="font-bold text-sm mb-3 text-blue-300 border-b border-gray-700/50 pb-2">■ 戦闘ログ {activeTab === 'info' ? '(最新3件)' : '(全履歴)'}</h3>
+            <h3 className="font-bold text-sm mb-3 text-blue-300 border-b border-gray-700/50 pb-2">■ 戦闘ログ {activeTab === 'sync' || activeTab === 'situation' ? '(最新3件)' : '(全履歴)'}</h3>
             {turnLogs.length > 0 ? (
               <div className="space-y-3 text-xs">
-                {(activeTab === 'info' ? turnLogs.slice(-3) : turnLogs).map((log, idx) => (
+                {((activeTab === 'sync' || activeTab === 'situation') ? turnLogs.slice(-3) : turnLogs).map((log, idx) => (
                   <div key={idx} className="bg-gray-700/30 rounded-lg p-2">
                     <div className="font-bold text-yellow-400 text-[10px] mb-1">T{log.turn}</div>
                     {log.orders.map((order, i) => (

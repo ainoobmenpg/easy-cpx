@@ -1,6 +1,7 @@
 // APP-6 Symbol Utility Functions
 // Provides symbol generation and color configuration for APP-6 compliant unit markers
 
+import { memo } from 'react';
 import type { Unit, APP6SymbolConfig } from '@shared/types';
 
 // APP-6 symbol codes for ground units
@@ -253,3 +254,127 @@ export function getControlMeasureLegend(): { label: string; color: string; type:
     { label: 'No-Fly Zone', color: CONTROL_MEASURE_COLORS.airspace.no_fly, type: 'airspace' },
   ];
 }
+
+// ============================================================
+// UnitMarker Component - APP-6 Compliant Unit Display
+// ============================================================
+
+interface UnitMarkerProps {
+  unit: Unit;
+  selectedUnitId: number | null;
+  onSelect: (unit: Unit) => void;
+  showExactPosition?: boolean;
+}
+
+// Memoized Unit component for performance
+// FoW display: show exact position marker and UI position marker separately
+export const UnitMarker = memo(function UnitMarker({
+  unit,
+  selectedUnitId,
+  onSelect,
+  showExactPosition = false
+}: UnitMarkerProps) {
+  // FoW: Determine displayed position based on observation confidence
+  const isEnemy = unit.side === 'enemy';
+  const confidence = unit.observation_confidence;
+  const hasEstimatedPosition = isEnemy && (confidence === 'unknown' || confidence === 'estimated') &&
+    unit.estimated_x !== undefined && unit.estimated_y !== undefined;
+
+  // UI display position (what player sees)
+  const displayX = hasEstimatedPosition ? unit.estimated_x! : unit.x;
+  const displayY = hasEstimatedPosition ? unit.estimated_y! : unit.y;
+
+  // Exact position (true position - for internal use)
+  const exactX = unit.x;
+  const exactY = unit.y;
+
+  const svgX = Math.floor(displayX) + 0.5;
+  const svgY = Math.floor(displayY) + 0.5;
+  const exactSvgX = Math.floor(exactX) + 0.5;
+  const exactSvgY = Math.floor(exactY) + 0.5;
+
+  // APP-6 affiliation color
+  const affiliation = getAffiliation(unit.side);
+  const sideColor = getColorForAffiliation(affiliation);
+  const frameColor = affiliation === 'friend' ? APP6_COLORS.friend_frame :
+                     affiliation === 'enemy' ? APP6_COLORS.enemy_frame :
+                     affiliation === 'neutral' ? APP6_COLORS.neutral_frame :
+                     APP6_COLORS.unknown_frame;
+
+  const isSelected = selectedUnitId === unit.id;
+
+  // APP-6 symbol code
+  const app6Code = getApp6SymbolCode(unit.type);
+  const app6Path = getApp6SvgPath(unit.type, affiliation);
+
+  // Status color - APP-6 style
+  const statusColors: Record<string, string> = {
+    intact: '#22c55e',      // Green - full strength
+    light_damage: '#eab308', // Yellow - light damage
+    medium_damage: '#f97316', // Orange - medium damage
+    heavy_damage: '#ef4444', // Red - heavy damage
+    destroyed: '#6b7280'    // Gray - destroyed
+  };
+  const statusColor = statusColors[unit.status] || '#22c55e';
+
+  // Observation confidence styling for enemy units - FoW display
+  const confidenceScore = unit.confidence_score;
+  let confidenceOpacity = 1.0;
+  let confidenceBorder = false;
+  let confidenceLabel = '';
+  let isEstimatedMarker = false;
+
+  if (isEnemy && confidence) {
+    if (confidence === 'unknown') {
+      confidenceOpacity = 0.5;
+      confidenceBorder = true;
+      confidenceLabel = confidenceScore !== undefined ? `${confidenceScore}%` : '?';
+      isEstimatedMarker = hasEstimatedPosition;
+    } else if (confidence === 'estimated') {
+      confidenceOpacity = 0.75;
+      confidenceBorder = true;
+      confidenceLabel = confidenceScore !== undefined ? `${confidenceScore}%` : '~';
+      isEstimatedMarker = hasEstimatedPosition;
+    } else {
+      confidenceLabel = confidenceScore !== undefined ? `${confidenceScore}%` : 'OK';
+    }
+  }
+
+  // Echelon indicator (simplified)
+  const echelonChar = unit.echelon ? unit.echelon.charAt(0).toUpperCase() : 'C';
+
+  return (
+    <g onClick={() => onSelect(unit)} style={{ cursor: 'pointer' }}>
+      {/* Exact position marker - shown when showExactPosition is true (for internal/debug view) */}
+      {showExactPosition && isEnemy && (
+        <g>
+          <circle cx={exactSvgX} cy={exactSvgY} r="0.5" fill="none" stroke="#ff00ff" strokeWidth="0.15" strokeDasharray="0.15,0.1" opacity={0.8} />
+          <text x={exactSvgX - 0.8} y={exactSvgY - 0.6} fontSize="0.35" fill="#ff00ff" fontWeight="bold" opacity={0.9}>
+            True
+          </text>
+        </g>
+      )}
+      {/* FoW estimated position marker - dashed circle */}
+      {isEstimatedMarker && (
+        <circle cx={svgX} cy={svgY} r="0.7" fill="none" stroke="#fbbf24" strokeWidth="0.1" strokeDasharray="0.2,0.1" opacity={confidenceOpacity * 0.7} />
+      )}
+      {/* APP-6 Symbol Frame - affiliation color */}
+      <rect x={svgX - 0.6} y={svgY - 0.5} width="1.2" height="1.0"
+        fill={sideColor} stroke={isSelected ? '#fff' : (confidenceBorder ? '#fbbf24' : frameColor)}
+        strokeWidth={isSelected ? 0.15 : 0.08} opacity={confidenceOpacity * 0.95} rx="0.1" />
+      {/* APP-6 Symbol - unit type graphic */}
+      <path d={app6Path} stroke="#fff" strokeWidth="0.12" fill="none" opacity={confidenceOpacity}
+        transform={`translate(${svgX}, ${svgY}) scale(0.8)`} />
+      {/* Echelon indicator */}
+      <text x={svgX - 0.4} y={svgY - 0.35} fontSize="0.35" fill="#fff" fontWeight="bold" opacity={confidenceOpacity}>
+        {echelonChar}
+      </text>
+      {/* Unit name with confidence label */}
+      <text x={svgX + 0.8} y={svgY + 0.8} fontSize="0.5" fill="#fff" stroke="#000" strokeWidth="0.15" paintOrder="stroke" fontWeight="bold" opacity={confidenceOpacity}>
+        {unit.name}{confidenceLabel ? ` (${confidenceLabel})` : ''}
+      </text>
+      {/* Status indicator box */}
+      <rect x={svgX + 0.4} y={svgY + 0.4} width="0.3" height="0.2" fill={statusColor} stroke="#000" strokeWidth="0.05" opacity={confidenceOpacity} rx="0.05" />
+    </g>
+  );
+});

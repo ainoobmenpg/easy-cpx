@@ -4,7 +4,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import jaTranslations from '../../public/locales/ja/translation.json';
 import enTranslations from '../../public/locales/en/translation.json';
 
-type TranslationKeys = typeof jaTranslations;
+type TranslationKeys = Record<string, unknown>;
 type Language = 'ja' | 'en';
 
 interface I18nContextType {
@@ -14,8 +14,8 @@ interface I18nContextType {
 }
 
 const translations: Record<Language, TranslationKeys> = {
-  ja: jaTranslations,
-  en: enTranslations,
+  ja: jaTranslations as TranslationKeys,
+  en: enTranslations as TranslationKeys,
 };
 
 const I18nContext = createContext<I18nContextType | null>(null);

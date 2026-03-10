@@ -4,6 +4,77 @@
 
 ---
 
+## 🟢 新規タスク (Issues #108-120)
+
+### フェーズ8：UI改善 + バグ修正
+
+- [ ] Issue #108: UI-i18n: Next.js i18n実装（ja/en） `cc:TODO`
+  - 依存: なし
+  - 概要: next-intl等使用、public/locales/*管理、主要画面対応
+  - GitHub: #108
+
+- [ ] Issue #109: CPX-REPLAY: RNGシード+構造化ログからの完全リプレイ `cc:TODO`
+  - 依存: #74 (RNG/構造化ログ)
+  - 概要: replayモード追加、ターン/判定/Injectログから状態復元、UIビューワー
+  - GitHub: #109
+
+- [ ] Issue #110: UI-1: バックエンド接続インジケータ＋APIベースURL診断 `cc:TODO`
+  - 依存: なし
+  - 概要: ヘッダー右側に接続バッジ、API不通時の診断モーダル
+  - GitHub: #110
+
+- [ ] Issue #111: UI-2: 存在しない/new-gameリダイレクトの修正 `cc:TODO`
+  - 依存: なし
+  - 概要: /new-gameを/gamesに置換
+  - GitHub: #111
+
+- [ ] Issue #112: UI-3: 文言/タイポ修正（日本語） `cc:TODO`
+  - 依存: なし
+  - 概要: 戦闘オッドン→戦闘オッズ、占领→占領
+  - GitHub: #112
+
+- [ ] Issue #113: UI-4: 右ペインをCPX 4タブ（Plan/Sync/Situation/Sustain）に再編 `cc:TODO`
+  - 依存: なし
+  - 概要: OPORD/ReportsをPlan/Situationに、SYNC/SUSTAINを新設
+  - GitHub: #113
+
+- [ ] Issue #114: UI-5: APP-6記号表示の統一＋コントロールメジャー重ね合わせ `cc:TODO`
+  - 依存: なし
+  - 概要: UnitMarkerをapp6.tsに統一、レイヤトグル追加
+  - GitHub: #114
+
+- [ ] Issue #115: UI-6: アクセシビリティ/ショートカット/フォーカス `cc:TODO`
+  - 依存: なし
+  - 概要: キーボードショートカット、aria-label追加
+  - GitHub: #115
+
+- [ ] Issue #116: UI-7: パン/ズームのパフォーマンス最適化 `cc:TODO`
+  - 依存: なし
+  - 概要: CSS transform + rAFで60fps目標
+  - GitHub: #116
+
+- [ ] Issue #117: UI-8: エラーハンドリング/ローディングの標準化 `cc:TODO`
+  - 依存: なし
+  - 概要: 共通useToast()/Skeleton作成
+  - GitHub: #117
+
+- [ ] Issue #118: UI-9: シナリオランチャ（選択→開始）導線の強化 `cc:TODO`
+  - 依存: なし
+  - 概要: ゲーム未選択時にCTA表示
+  - GitHub: #118
+
+- [ ] Issue #119: UI-10: i18n対象漏れ/固定文面の洗い出し `cc:TODO`
+  - 依存: #108
+  - 概要: ゲーム画面の固定文言をlocalesに移植
+  - GitHub: #119
+
+- [ ] Issue #120: API-1: /api/games/startが/api/games/{game_id}と競合 `cc:TODO`
+  - 依存: なし
+  - 概要: 静的パスを動的パスの前に宣言、またはエンドポイント名変更
+  - GitHub: #120
+
+---
+
 ## 🟣 新規タスク (Issues #99-107)
 
 ### フェーズ7：新機能＋Ops

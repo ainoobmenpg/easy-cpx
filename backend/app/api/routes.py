@@ -157,6 +157,33 @@ def create_game(request: GameCreate, db: Session = Depends(get_db)):
     }
 
 
+class GameStartRequest(BaseModel):
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "scenario_id": "israel_2026",
+            "game_name": "Operation Judea 2026"
+        }
+    })
+
+    scenario_id: str = Field(..., min_length=1, max_length=100)
+    game_name: str = Field(..., min_length=1, max_length=100)
+
+
+@router.post("/games/start")
+def start_game(request: GameStartRequest, db: Session = Depends(get_db)):
+    """Start a new game from a scenario"""
+    manager = ScenarioManager()
+    try:
+        result = manager.create_game_from_scenario(
+            request.scenario_id,
+            request.game_name,
+            db
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.get("/games/{game_id}")
 def get_game(game_id: int, db: Session = Depends(get_db)):
     """Get game by ID"""
@@ -574,33 +601,6 @@ def get_scenario(scenario_id: str):
     if not scenario:
         raise HTTPException(status_code=404, detail="Scenario not found")
     return scenario
-
-
-class GameStartRequest(BaseModel):
-    model_config = ConfigDict(json_schema_extra={
-        "example": {
-            "scenario_id": "israel_2026",
-            "game_name": "Operation Judea 2026"
-        }
-    })
-
-    scenario_id: str = Field(..., min_length=1, max_length=100)
-    game_name: str = Field(..., min_length=1, max_length=100)
-
-
-@router.post("/games/start")
-def start_game(request: GameStartRequest, db: Session = Depends(get_db)):
-    """Start a new game from a scenario"""
-    manager = ScenarioManager()
-    try:
-        result = manager.create_game_from_scenario(
-            request.scenario_id,
-            request.game_name,
-            db
-        )
-        return result
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
 
 
 # Debriefing endpoints

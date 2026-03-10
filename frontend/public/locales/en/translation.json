@@ -89,6 +89,62 @@
     "draw": "Draw",
     "defeat": "Defeat"
   },
+  "games": {
+    "title": "Game List",
+    "loading": "Loading games...",
+    "error": "Failed to load games",
+    "noGames": "No games available",
+    "newGame": "New Game",
+    "continue": "Continue",
+    "delete": "Delete",
+    "status": {
+      "active": "Active",
+      "ended": "Ended",
+      "adjudicating": "Adjudicating"
+    }
+  },
+  "phase": {
+    "orders": "Orders Input",
+    "adjudication": "Adjudicating",
+    "sitrep": "SITREP Display"
+  },
+  "weather": {
+    "clear": "Clear",
+    "cloudy": "Cloudy",
+    "rain": "Rain",
+    "storm": "Storm",
+    "fog": "Fog",
+    "night": "Night"
+  },
+  "difficulty": {
+    "easy": "Easy",
+    "normal": "Normal",
+    "hard": "Hard"
+  },
+  "actions": {
+    "start": "Start",
+    "cancel": "Cancel",
+    "close": "Close",
+    "confirm": "Confirm"
+  },
+  "labels": {
+    "mapSize": "Map Size",
+    "missionStart": "Mission Start"
+  },
+  "training": {
+    "title": "Training",
+    "selectMode": "Select Mode"
+  },
+  "debriefing": {
+    "title": "Debriefing",
+    "result": "Result",
+    "finalScore": "Final Score",
+    "totalTurns": "Total Turns",
+    "enemyLosses": "Enemy Losses",
+    "playerLosses": "Player Losses",
+    "playAgain": "Play Again",
+    "backToMenu": "Back to Menu"
+  },
   "turn": "Turn",
   "score": "Score",
   "player": "Player",

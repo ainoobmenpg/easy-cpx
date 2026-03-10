@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 import API from '../lib/api';
 import { useI18n } from '../lib/i18n';
 import LanguageSwitcher from '../lib/language-switcher';
+import { ScenarioCardSkeleton } from '../components/Skeleton';
+import ErrorDisplay from '../components/ErrorDisplay';
+import { useToast } from '../hooks/useToast';
 
 interface Scenario {
   id: string;
@@ -20,7 +23,7 @@ interface Scenario {
 // Fallback scenarios in case API fails
 const FALLBACK_SCENARIOS: Scenario[] = [
   { id: 'defend-the-bridge', name: '橋の防衛', description: '敵の進撃を阻止し、橋を維持せよ', difficulty: 'normal', map_size: { width: 50, height: 50 } },
-  { id: 'breakthrough', name: '突破口', description: '敵戦線を突破し、後方拠点占领せよ', difficulty: 'hard', map_size: { width: 60, height: 40 } },
+  { id: 'breakthrough', name: '突破口', description: '敵戦線を突破し、後方拠点占領せよ', difficulty: 'hard', map_size: { width: 60, height: 40 } },
   { id: 'counter-attack', name: '反撃', description: '敵の攻撃を撃退し、奪われた地域を奪還せよ', difficulty: 'easy', map_size: { width: 40, height: 40 } },
   { id: 'urban-assault', name: '都市攻略', description: '敵が占領した都市を奪還せよ', difficulty: 'hard', map_size: { width: 50, height: 40 } },
   { id: 'escort-mission', name: '護衛任務', description: '輸送補給部隊を護衛せよ', difficulty: 'normal', map_size: { width: 60, height: 50 } },
@@ -32,6 +35,7 @@ const FALLBACK_SCENARIOS: Scenario[] = [
 export default function ScenariosPage() {
   const router = useRouter();
   const { t, locale } = useI18n();
+  const { showToast } = useToast();
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
@@ -73,6 +77,7 @@ export default function ScenariosPage() {
       if (!res.ok) {
         const errText = await res.text();
         console.error('Start game error:', errText);
+        showToast(t('scenarios.startError') || 'Failed to start game', 'error');
         setStartingGame(false);
         return;
       }
@@ -110,8 +115,34 @@ export default function ScenariosPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-blue-400 text-xl">シナリオを読み込み中...</div>
+      <div className="min-h-screen bg-gray-900 text-gray-100">
+        <header className="bg-gray-800/90 border-b border-gray-700/50 px-6 py-4 backdrop-blur-sm">
+          <div className="max-w-6xl mx-auto flex justify-between items-center">
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
+              {t('common.gameTitle')} - {t('common.scenarioSelect') || 'Scenario Select'}
+            </h1>
+            <div className="flex gap-3 items-center">
+              <LanguageSwitcher />
+              <button
+                onClick={() => router.push('/games')}
+                className="text-sm bg-gray-700/50 hover:bg-gray-600/50 px-4 py-2 rounded transition-colors"
+              >
+                {t('common.gameList')}
+              </button>
+              <button
+                onClick={() => router.push('/')}
+                className="text-sm bg-gray-700/50 hover:bg-gray-600/50 px-4 py-2 rounded transition-colors"
+              >
+                {t('common.back')}
+              </button>
+            </div>
+          </div>
+        </header>
+        <main className="max-w-6xl mx-auto p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3, 4, 5, 6].map(i => <ScenarioCardSkeleton key={i} />)}
+          </div>
+        </main>
       </div>
     );
   }

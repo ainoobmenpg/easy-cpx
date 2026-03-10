@@ -3,6 +3,8 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import API from '../lib/api';
+import { useI18n } from '../lib/i18n';
+import LanguageSwitcher from '../lib/language-switcher';
 
 interface DebriefingData {
   game_id: number;
@@ -58,6 +60,7 @@ interface DebriefingData {
 function DebriefingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useI18n();
   const gameId = searchParams.get('gameId');
 
   const [debriefing, setDebriefing] = useState<DebriefingData | null>(null);
@@ -137,10 +140,11 @@ function DebriefingContent() {
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100">
       <header className="bg-gray-800/90 border-b border-gray-700/50 px-6 py-4 backdrop-blur-sm">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-4xl mx-auto flex justify-between items-center">
           <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
-            Debriefing Report
+            {t('debriefing.title')}
           </h1>
+          <LanguageSwitcher />
         </div>
       </header>
 

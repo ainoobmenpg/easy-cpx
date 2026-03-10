@@ -363,3 +363,49 @@ class TestSitrepEndpoint:
         """Test get SITREP with invalid game"""
         response = client.get("/api/games/999/sitrep")
         assert response.status_code == 404
+
+
+class TestGameStartEndpoint:
+    """Test /api/games/start endpoint routing"""
+
+    def test_start_game_creates_game_from_scenario(self, client, test_db):
+        """Test POST /api/games/start creates a game from scenario"""
+        response = client.post("/api/games/start", json={
+            "scenario_id": "defend-the-bridge",
+            "game_name": "Test Started Game"
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert "game_id" in data
+        assert data["scenario_id"] == "defend-the-bridge"
+        assert data["turn"] == 1
+
+    def test_start_game_invalid_scenario_returns_400(self, client, test_db):
+        """Test POST /api/games/start with invalid scenario"""
+        response = client.post("/api/games/start", json={
+            "scenario_id": "invalid-scenario",
+            "game_name": "Test Game"
+        })
+        assert response.status_code == 400
+
+    def test_start_game_route_not_conflict_with_get_game(self, client, test_db):
+        """Test that /games/start does not conflict with /games/{game_id}"""
+        # First, create a game with game_id=1 (simulating 'start' as id)
+        game = Game(name="Game with id 1")
+        test_db.add(game)
+        test_db.commit()
+        test_db.refresh(game)
+
+        # GET /api/games/1 should return the game
+        response = client.get("/api/games/1")
+        assert response.status_code == 200
+        assert response.json()["name"] == "Game with id 1"
+
+        # POST /api/games/start should still work (not treated as game_id=start)
+        response = client.post("/api/games/start", json={
+            "scenario_id": "defend-the-bridge",
+            "game_name": "New Game"
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert "game_id" in data
