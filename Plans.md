@@ -4,6 +4,60 @@
 
 ---
 
+## 🟣 新規タスク (Issues #99-107)
+
+### フェーズ7：新機能＋Ops
+
+- [ ] Issue #99: CPX-CHAT: ロール別チャット/EXCON告知チャンネル `cc:TODO`
+  - 依存: #75 (CPX-AUTH), #76 (CPX-RBAC), #77 (CPX-WS)
+  - 概要: BLUE/RED/WHITE/Observer別のチャットチャンネル、RBACに基づいた書込可否制御
+  - 参考: docs/issues/cpx-chat-rbac.md
+
+- [ ] Issue #100: CPX-CYCLES: Planning/Air/Logisticsサイクルの導入 `cc:TODO`
+  - 依存: #81 (CPX-ATO/ACO), #82 (CPX-LOG)
+  - 概要: Gameにplanning_cycle/air_tasking_cycle/logistics_cycle概念を追加、Turn確定時に進捗更新
+  - 参考: docs/issues/cpx-cycles.md
+
+- [ ] Issue #101: CPX-VALIDATION: 生成AI出力のスキーマ検証/サニタイズ `cc:TODO`
+  - 依存: なし（基盤）
+  - 概要: shared/schemas/*.schema.jsonに対するJSON Schema検証、フェイルセーフ実装
+  - 参考: docs/issues/cpx-validation-ai.md
+
+- [ ] Issue #102: Ops-Compose: Docker Compose/Makeタスク整備 `cc:TODO`
+  - 依存: なし（DevOps）
+  - 概要: docker-compose.yml (backend/frontend/db)、Makefile (up/down/test/lint)、.env.example整備
+  - 参考: docs/issues/ops-compose.md
+
+- [x] Issue #103: CI-ScriptScan: 簡体字/混在表記の検出リンター `cc:完了`
+  - 依存: なし（DevOps）
+  - 概要: 正規表現で簡体字/中英混在を検出しPRで警告
+  - 参考: docs/issues/ci-script-scan.md
+  - 実装: scripts/ci-script-scan/配下にscan.pyとconfig.jsonを作成、GitHub Actionsワークフロー追加
+
+- [ ] Issue #104: CPX-TRAINING: 訓練評価スコアボード（MOP/MOE/CCIR） `cc:TODO`
+  - 依存: #74 (CPX-8: AAR), #57 (VP scoring)
+  - 概要: トレーニングダッシュボード、ターンごとの達成度更新、総合ランク提示
+  - 参考: docs/issues/cpx-training-scoreboard.md
+
+- [ ] Issue #105: UI-i18n: Next.js i18n実装（ja/en） `cc:TODO`
+  - 依存: #96 (Docs-8: i18n方針)
+  - 概要: next-intl等使用、public/locales/*管理、主要画面対応
+  - 参考: docs/issues/ui-i18n-impl.md
+
+- [ ] Issue #106: CPX-REPLAY: RNGシード+構造化ログからの完全リプレイ `cc:TODO`
+  - 依存: #74 (CPX-8: RNG/構造化ログ)
+  - 概要: replayモード追加、ターン/判定/Injectログから状態復元、UIビューワー
+  - 参考: docs/issues/cpx-replayer.md
+
+- [x] Issue #107: CPX-SYNC: 時間×効果の同期マトリクス（UI/エクスポート） `cc:完了`
+  - 依存: #81 (CPX-ATO/ACO), #70 (CPX-4: Inject), #67 (CPX-1: OPORD)
+  - 概要: Syncタブにタイムライン×効果配置、OPORD/ATO/Inject連動、CSV/JSONエクスポート
+  - 参考: docs/issues/cpx-sync-matrix.md
+  - 実装: SyncMatrix/SyncMatrixEntryモデル追加、SyncMatrixService作成、APIエンドポイント作成
+  - テスト: 24件のサービステスト作成・合格
+
+---
+
 ## 🔴 進行中のタスク
 
 (なし)

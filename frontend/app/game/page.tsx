@@ -155,7 +155,7 @@ function GameContent() {
   // Issue #52: Reachable positions for movement preview
   const [reachablePositions, setReachablePositions] = useState<{x: number; y: number; can_reach: boolean}[]>([]);
   // Issue #56: Batch orders for batch submission
-  const [pendingOrders, setPendingOrders] = useState<{unit_id: number; order_type: string; location_x?: number; location_y?: number; target_units?: number[]}[]>([]);
+  const [pendingOrders, setPendingOrders] = useState<{unit_id: number; order_type: string; intent?: string; location_x?: number; location_y?: number; target_units?: number[]}[]>([]);
 
   // Resolve gameId from URL param or API
   useEffect(() => {
@@ -346,13 +346,9 @@ function GameContent() {
       // Add turn log
       setTurnLogs(prev => [{
         turn: data.turn || gameState?.turn || 1,
-        type: 'orders_result',
         orders: [{
-          id: 0,
-          unit_name: `${pendingOrders.length} units`,
-          order_type: 'batch',
-          intent: `${pendingOrders.length} orders submitted`,
-          status: 'submitted'
+          unit: `${pendingOrders.length} units`,
+          outcome: 'submitted'
         }]
       }, ...prev]);
     } catch (e) { console.error('Failed to submit batch orders:', e); }
@@ -1268,7 +1264,7 @@ function GameContent() {
                       <span className="text-purple-300">特攻:</span>
                       <div className="flex gap-1">
                         {Array.from({ length: 3 }).map((_, i) => (
-                          <span key={i} className={`w-3 h-3 rounded-full ${i < (selectedUnit.strike_remaining || 0) ? 'bg-purple-500' : 'bg-gray-600'}`} />
+                          <span key={i} className={`w-3 h-3 rounded-full ${i < ((selectedUnit as any).strike_remaining || 0) ? 'bg-purple-500' : 'bg-gray-600'}`} />
                         ))}
                       </div>
                       {(selectedUnit as any).strike_next_attack_blocked && (

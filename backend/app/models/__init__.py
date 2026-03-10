@@ -215,6 +215,28 @@ class ReconConfidence(enum.Enum):
 class GameMode(enum.Enum):
     SIMULATION = "simulation"  # Full rule engine
     ARCADE = "arcade"  # Simplified 2D6 rules
+    REPLAY = "replay"  # Replay mode from logs
+
+
+# =============================================================================
+# CPX-CYCLES: Cycle Management Enums
+# =============================================================================
+
+class CycleType(enum.Enum):
+    PLANNING = "planning"
+    AIR_TASKING = "air_tasking"
+    LOGISTICS = "logistics"
+
+
+class CyclePhase(enum.Enum):
+    PLANNING = "planning"
+    EXECUTION = "execution"
+
+
+class CycleStatus(enum.Enum):
+    ON_TRACK = "on_track"
+    DELAYED = "delayed"
+    FAILED = "failed"
 
 
 class Game(Base):
@@ -245,6 +267,12 @@ class Game(Base):
 
     # CCIR/PIR/ROE data for Arcade mode (stored as JSON)
     ccir_data = Column(JSON, nullable=True)
+
+    # CPX-CYCLES: Cycle management (stored as JSON)
+    # Each cycle: {"phase": "planning|execution", "deadline_turn": int, "status": "on_track|delayed|failed", "last_updated": "YYYY-MM-DD"}
+    planning_cycle = Column(JSON, nullable=True)
+    air_tasking_cycle = Column(JSON, nullable=True)
+    logistics_cycle = Column(JSON, nullable=True)
 
     units = relationship("Unit", back_populates="game", cascade="all, delete-orphan")
     turns = relationship("Turn", back_populates="game", cascade="all, delete-orphan")
@@ -917,3 +945,106 @@ class AirCorridor(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     game = relationship("Game")
+
+
+# =============================================================================
+# CPX-SYNC: Synchronization Matrix Model
+# =============================================================================
+
+class SyncMatrix(Base):
+    """Sync Matrix for time x effect synchronization planning"""
+    __tablename__ = "sync_matrices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    game_id = Column(Integer, ForeignKey("games.id"), nullable=False)
+
+    # Matrix configuration
+    name = Column(String, nullable=False, default="Default Sync Matrix")
+    description = Column(String, nullable=True)
+
+    # Timeline configuration (phases)
+    phases = Column(JSON, nullable=False, default=list)  # List of phase names
+    # Effect categories
+    effects = Column(JSON, nullable=False, default=list)  # List of effect types
+    # Resolution (time units)
+    resolution = Column(String, default="turn")  # turn, hour, day
+
+    # Matrix data: 2D array of entries
+    # Each entry: {phase, effect, value, notes, linked_items}
+    matrix_data = Column(JSON, nullable=False, default=dict)
+
+    # Status
+    status = Column(String, default="draft")  # draft, active, archived
+
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = Column(String, nullable=True)
+
+    game = relationship("Game")
+
+
+class SyncMatrixEntry(Base):
+    """Individual entry in sync matrix"""
+    __tablename__ = "sync_matrix_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sync_matrix_id = Column(Integer, ForeignKey("sync_matrices.id"), nullable=False)
+
+    # Entry identification
+    phase = Column(String, nullable=False)
+    effect = Column(String, nullable=False)
+
+    # Entry data
+    value = Column(String, nullable=True)  # intensity, priority, status
+    notes = Column(Text, nullable=True)
+    start_time = Column(String, nullable=True)  # Turn/hour/day
+    end_time = Column(String, nullable=True)
+    linked_opord_id = Column(Integer, ForeignKey("opords.id"), nullable=True)
+    linked_ato_mission_id = Column(Integer, nullable=True)
+    linked_inject_id = Column(String, nullable=True)
+
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    sync_matrix = relationship("SyncMatrix")
+
+
+# =============================================================================
+# CPX-CHAT: Chat/EXCON Channel Models
+# =============================================================================
+
+class ChatMessage(Base):
+    """Chat message for role-based channels"""
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    game_id = Column(Integer, ForeignKey("games.id"), nullable=False)
+
+    # Sender information
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    username = Column(String, nullable=False)  # Denormalized for display
+
+    # Message content
+    content = Column(Text, nullable=False)
+
+    # Channel targeting (role-based visibility)
+    # "all" - visible to everyone
+    # "blue" - only blue side
+    # "red" - only red side
+    # "white" - only white/umpire
+    # "observer" - only observers
+    channel = Column(String, default="all")
+
+    # Timestamp
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Read tracking (JSON: {user_id: timestamp})
+    read_by = Column(JSON, default={})
+
+    # Metadata
+    turn = Column(Integer, nullable=True)  # Current turn when sent
+
+    game = relationship("Game")
+    user = relationship("User")

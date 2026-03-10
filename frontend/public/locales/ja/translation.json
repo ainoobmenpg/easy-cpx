@@ -10,7 +10,11 @@
     "zoomOut": "マップをzoom out",
     "zoomReset": "リセット",
     "fowDebug": "FoWデバッグ",
-    "legend": "凡例"
+    "legend": "凡例",
+    "scenarioSelect": "シナリオ選択",
+    "back": "戻る",
+    "gameStart": "ゲーム開始",
+    "selectScenario": "シナリオを選択してください。各シナリオには異なる任務目標と難易度があります。"
   },
   "tabs": {
     "info": "情報",

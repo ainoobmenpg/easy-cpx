@@ -6,6 +6,7 @@ from typing import Optional
 import random
 import math
 import logging
+from app.services.cycle_manager import advance_cycle, get_cycle_summary, get_cycle_penalty, apply_cycle_penalties
 
 logger = logging.getLogger("cpx")
 
@@ -469,6 +470,14 @@ class RuleEngine:
         game.current_turn += 1
         game.current_time = self._advance_time(game.current_time)
 
+        # CPX-CYCLES: Update all cycles after turn advancement
+        if game.planning_cycle:
+            game.planning_cycle = advance_cycle(game.planning_cycle, game.current_turn)
+        if game.air_tasking_cycle:
+            game.air_tasking_cycle = advance_cycle(game.air_tasking_cycle, game.current_turn)
+        if game.logistics_cycle:
+            game.logistics_cycle = advance_cycle(game.logistics_cycle, game.current_turn)
+
         # If game ended, update game status
         if game_end["ended"]:
             game.is_active = False
@@ -493,7 +502,12 @@ class RuleEngine:
                 }
                 for i in inquiries
             ],
-            "reporting_summary": reporting_summary
+            "reporting_summary": reporting_summary,
+            "cycles": get_cycle_summary({
+                "planning": game.planning_cycle,
+                "air_tasking": game.air_tasking_cycle,
+                "logistics": game.logistics_cycle,
+            })
         }
 
     def _check_game_end_conditions(self, game_id: int) -> dict:
@@ -1018,9 +1032,25 @@ class RuleEngine:
             attack_rating = base_ratings["attack"]
             defense_rating = base_ratings["defense"]
 
+            # CPX-CYCLES: Calculate cycle penalty for adjudication v1.6
+            cycle_penalty = 0.0
+            if game:
+                cycle_penalty = apply_cycle_penalties({
+                    "planning": game.planning_cycle,
+                    "air_tasking": game.air_tasking_cycle,
+                    "logistics": game.logistics_cycle,
+                })
+                if cycle_penalty > 0:
+                    logger.info(f"[CYCLES] Applying penalty: {cycle_penalty:.2f}")
+
             # Calculate diff: (2D6 + Attack Rating) - (2D6 + Defense Rating)
             attack_total = attack_roll + attack_rating
             defense_total = defense_roll + defense_rating
+
+            # Apply cycle penalty to attack (reduces effectiveness)
+            if cycle_penalty > 0:
+                attack_total = attack_total - cycle_penalty
+
             diff = attack_total - defense_total
 
             # Log the dice rolls and diff

@@ -2,7 +2,17 @@
 import os
 import json
 import httpx
+import logging
 from typing import Optional
+
+from app.services.validation_service import (
+    get_validation_service,
+    SchemaType,
+    ValidationResult,
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 class AIClient:
@@ -11,11 +21,47 @@ class AIClient:
     def __init__(self):
         self.api_key = os.getenv("MINIMAX_API_KEY", "")
         self.base_url = os.getenv("MINIMAX_BASE_URL", "https://api.minimax.chat/v1")
+        self._validator = None
+
+    @property
+    def validator(self):
+        """Lazy-load validation service"""
+        if self._validator is None:
+            try:
+                self._validator = get_validation_service()
+            except Exception:
+                logger.warning("Validation service not available")
+                self._validator = None
+        return self._validator
+
+    def _validate_and_repair(self, data: dict, schema_type: SchemaType) -> dict:
+        """Validate AI output and repair if needed"""
+        if not self.validator:
+            return data
+
+        report = self.validator.validate(data, schema_type, repair=True)
+
+        if report.status == ValidationResult.INVALID:
+            logger.warning(
+                f"AI output validation failed for {schema_type.value}: {report.errors[:3]}"
+            )
+            # Fall back to safe default
+            if schema_type == SchemaType.ORDER_PARSER:
+                return self._fallback_parse("")
+            elif schema_type == SchemaType.SITREP:
+                return self._fallback_sitrep({}, [])
+            return data
+
+        if report.status == ValidationResult.REPAIRED:
+            logger.info(f"AI output repaired for {schema_type.value}")
+
+        return report.repaired_data if report.repaired_data else data
 
     async def parse_order(self, player_input: str, game_context: dict) -> dict:
         """Parse player order from natural language to structured JSON"""
         if not self.api_key:
-            return self._fallback_parse(player_input)
+            result = self._fallback_parse(player_input)
+            return self._validate_and_repair(result, SchemaType.ORDER_PARSER)
 
         prompt = f"""You are a military order parser for a command simulation game.
 Parse the player's order into a strict JSON structure.
@@ -62,14 +108,17 @@ IMPORTANT: target_units must be a list of unit IDs (strings), NOT unit names. Do
                 )
                 result = response.json()
                 content = result.get("choices", [{}])[0].get("message", {}).get("content", "{}")
-                return json.loads(content)
+                parsed = json.loads(content)
+                return self._validate_and_repair(parsed, SchemaType.ORDER_PARSER)
         except Exception as e:
-            return self._fallback_parse(player_input)
+            result = self._fallback_parse(player_input)
+            return self._validate_and_repair(result, SchemaType.ORDER_PARSER)
 
     async def generate_sitrep(self, game_state: dict, order_results: list) -> dict:
         """Generate SITREP from game state and order results"""
         if not self.api_key:
-            return self._fallback_sitrep(game_state, order_results)
+            result = self._fallback_sitrep(game_state, order_results)
+            return self._validate_and_repair(result, SchemaType.SITREP)
 
         prompt = f"""Generate a military Situation Report (SITREP) from the game state.
 
@@ -122,9 +171,11 @@ Output ONLY valid JSON:
                 )
                 result = response.json()
                 content = result.get("choices", [{}])[0].get("message", {}).get("content", "{}")
-                return json.loads(content)
+                parsed = json.loads(content)
+                return self._validate_and_repair(parsed, SchemaType.SITREP)
         except Exception as e:
-            return self._fallback_sitrep(game_state, order_results)
+            result = self._fallback_sitrep(game_state, order_results)
+            return self._validate_and_repair(result, SchemaType.SITREP)
 
     async def generate_excon_orders(self, game_state: dict) -> dict:
         """Generate enemy (ExCon) orders for AI-controlled forces"""

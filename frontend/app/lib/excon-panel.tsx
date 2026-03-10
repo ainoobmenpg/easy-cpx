@@ -231,8 +231,8 @@ export default function ExconPanel({ gameId, turn, isWhiteCell = true }: ExconPa
                 </div>
                 {log.effects_applied?.map((effect: Record<string, unknown>, i: number) => (
                   <div key={i} className="text-sm text-gray-300 mt-1">
-                    {effect.target}: {effect.modifier > 0 ? '+' : ''}{effect.modifier}
-                    {effect.duration_turns && ` (${effect.duration_turns} turns)`}
+                    {String(effect.target)}: {Number(effect.modifier) > 0 ? '+' : ''}{String(effect.modifier)}
+                    {effect.duration_turns ? <span> ({String(effect.duration_turns)} turns)</span> : null}
                   </div>
                 ))}
               </div>

@@ -1,0 +1,39 @@
+{
+  "version": "1.0.0",
+  "description": "CI-ScriptScan configuration for detecting Simplified Chinese and mixed language patterns",
+  "patterns": {
+    "simplified_chinese": [
+      "[一-龥]",
+      "[㐀-䶿]",
+      "[豈-龎]"
+    ],
+    "mixed_chinese_english": [
+      "[a-zA-Z]+[一-龥]+",
+      "[一-龥]+[a-zA-Z]+",
+      "[a-zA-Z]+[㐀-䶿]+",
+      "[㐀-䶿]+[a-zA-Z]+"
+    ]
+  },
+  "excluded_paths": [
+    "node_modules/",
+    ".git/",
+    "__pycache__/",
+    "*.pyc",
+    ".ruff_cache/",
+    ".pytest_cache/",
+    "*.png",
+    "*.jpg",
+    "*.jpeg",
+    "*.gif",
+    "*.ico",
+    "*.svg",
+    "*.db",
+    "*.lock"
+  ],
+  "excluded_files": [
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml"
+  ],
+  "severity": "warning"
+}

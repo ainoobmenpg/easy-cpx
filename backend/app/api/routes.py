@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import Literal
-from typing import Optional, List
+from typing import Optional, List, Dict
 from app.database import get_db
 from app.models import Game, Unit, Turn, Order, OrderType, PlayerKnowledge, Event, GameMode, is_arcade_game
 from app.services.adjudication import RuleEngine
@@ -18,6 +18,14 @@ from app.services.opord_service import OpordService, get_opord_service
 from app.services.logistics_service import LogisticsService, create_logistics_service
 from app.services.rate_limiter import get_rate_limiter
 from app.services.audit_logger import get_audit_logger, AuditEventType, AuditSeverity
+from app.services.cycle_manager import (
+    initialize_game_cycles,
+    advance_cycle,
+    get_cycle_penalty,
+    apply_cycle_penalties,
+    get_cycle_summary,
+)
+from app.services.replay_service import ReplayService, create_replay_service
 import asyncio
 import os
 
@@ -127,6 +135,11 @@ def list_games(db: Session = Depends(get_db)):
 def create_game(request: GameCreate, db: Session = Depends(get_db)):
     """Create a new game"""
     game = Game(name=request.name)
+    # Initialize cycles for CPX-CYCLES
+    initial_cycles = initialize_game_cycles(1)
+    game.planning_cycle = initial_cycles["planning"]
+    game.air_tasking_cycle = initial_cycles["air_tasking"]
+    game.logistics_cycle = initial_cycles["logistics"]
     db.add(game)
     db.commit()
     db.refresh(game)
@@ -137,7 +150,10 @@ def create_game(request: GameCreate, db: Session = Depends(get_db)):
         "current_time": game.current_time,
         "weather": game.weather,
         "phase": game.phase,
-        "is_active": game.is_active
+        "is_active": game.is_active,
+        "planning_cycle": game.planning_cycle,
+        "air_tasking_cycle": game.air_tasking_cycle,
+        "logistics_cycle": game.logistics_cycle,
     }
 
 
@@ -159,6 +175,9 @@ def get_game(game_id: int, db: Session = Depends(get_db)):
         "terrain_data": game.terrain_data,
         "map_width": game.map_width,
         "map_height": game.map_height,
+        "planning_cycle": game.planning_cycle,
+        "air_tasking_cycle": game.air_tasking_cycle,
+        "logistics_cycle": game.logistics_cycle,
     }
 
 
@@ -902,6 +921,15 @@ async def _arcade_turn_commit(request, db, game, turn):
 
     # Advance turn
     game.current_turn += 1
+
+    # CPX-CYCLES: Update all cycles after turn advancement
+    if game.planning_cycle:
+        game.planning_cycle = advance_cycle(game.planning_cycle, game.current_turn)
+    if game.air_tasking_cycle:
+        game.air_tasking_cycle = advance_cycle(game.air_tasking_cycle, game.current_turn)
+    if game.logistics_cycle:
+        game.logistics_cycle = advance_cycle(game.logistics_cycle, game.current_turn)
+
     db.commit()
 
     return {
@@ -913,7 +941,12 @@ async def _arcade_turn_commit(request, db, game, turn):
         "sitrep": sitrep,
         "next_time": None,
         "next_turn": game.current_turn,
-        "victory": result.get("victory")
+        "victory": result.get("victory"),
+        "cycles": get_cycle_summary({
+            "planning": game.planning_cycle,
+            "air_tasking": game.air_tasking_cycle,
+            "logistics": game.logistics_cycle,
+        }),
     }
 
 
@@ -1553,4 +1586,92 @@ def get_reports_list(game_id: int, db: Session = Depends(get_db)):
             for t in turns_with_reports
         ],
         "current_turn": game.current_turn
+    }
+
+
+# =============================================================================
+# CPX-REPLAY: Replay API Endpoints
+# =============================================================================
+
+@router.get("/replay/{game_id}/timeline")
+def get_replay_timeline(game_id: int, db: Session = Depends(get_db)):
+    """
+    Get event timeline for replay.
+    """
+    game = db.query(Game).filter(Game.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    replay_service = create_replay_service(game_id)
+    if not replay_service.load_from_db(db, game_id):
+        raise HTTPException(status_code=400, detail="Failed to load replay data")
+
+    timeline = replay_service.get_event_timeline()
+    return {
+        "game_id": game_id,
+        "seed": replay_service.seed,
+        "turn_seeds": replay_service.get_turn_seeds(),
+        "total_turns": replay_service.get_total_turns(),
+        "timeline": timeline
+    }
+
+
+@router.get("/replay/{game_id}/turn/{turn_number}")
+def get_replay_turn(game_id: int, turn_number: int, db: Session = Depends(get_db)):
+    """
+    Get replay data for a specific turn.
+    """
+    game = db.query(Game).filter(Game.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    replay_service = create_replay_service(game_id)
+    if not replay_service.load_from_db(db, game_id):
+        raise HTTPException(status_code=400, detail="Failed to load replay data")
+
+    turn_summary = replay_service.get_turn_summary(turn_number)
+    if not turn_summary:
+        raise HTTPException(status_code=404, detail="Turn not found")
+
+    return turn_summary
+
+
+@router.get("/replay/{game_id}/state/{turn_number}")
+def get_replay_state(game_id: int, turn_number: int, db: Session = Depends(get_db)):
+    """
+    Get reconstructed state at a specific turn.
+    """
+    game = db.query(Game).filter(Game.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    replay_service = create_replay_service(game_id)
+    if not replay_service.load_from_db(db, game_id):
+        raise HTTPException(status_code=400, detail="Failed to load replay data")
+
+    state = replay_service.get_state_at_turn(turn_number)
+    return {
+        "turn": state.turn_number,
+        "time": state.time,
+        "weather": state.weather,
+        "seed": state.seed,
+        "turn_seed": state.turn_seed,
+        "events": state.events
+    }
+
+
+@router.post("/replay/from-logs")
+def create_replay_from_logs(log_data: List[Dict[str, Any]]):
+    """
+    Create a replay session from log data (for external replay viewers).
+    """
+    replay_service = create_replay_service()
+    if not replay_service.load_from_logs(log_data):
+        raise HTTPException(status_code=400, detail="Failed to load log data")
+
+    return {
+        "seed": replay_service.seed,
+        "turn_seeds": replay_service.get_turn_seeds(),
+        "total_turns": replay_service.get_total_turns(),
+        "timeline": replay_service.get_event_timeline()
     }

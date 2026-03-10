@@ -51,13 +51,13 @@ export function getApp6SymbolCode(unitType: string): string {
 }
 
 // Get affiliation from side
-export function getAffiliation(side: string): string {
-  return AFFILIATION_MAP[side] || 'unknown';
+export function getAffiliation(side: string): 'friend' | 'enemy' | 'neutral' | 'unknown' {
+  return (AFFILIATION_MAP[side] || 'unknown') as 'friend' | 'enemy' | 'neutral' | 'unknown';
 }
 
 // Get status from unit status
-export function getStatus(unitStatus: string): string {
-  return STATUS_MAP[unitStatus] || 'present';
+export function getStatus(unitStatus: string): 'present' | 'anticipated' | 'suspect' | 'reimbursed' {
+  return (STATUS_MAP[unitStatus] || 'present') as 'present' | 'anticipated' | 'suspect' | 'reimbursed';
 }
 
 // Get color for affiliation

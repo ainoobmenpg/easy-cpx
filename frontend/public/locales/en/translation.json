@@ -1,0 +1,97 @@
+{
+  "common": {
+    "retry": "Retry",
+    "gameTitle": "Operational CPX",
+    "gameList": "Game List",
+    "help": "Help",
+    "display": "Display",
+    "guide": "Guide",
+    "zoomIn": "Zoom In",
+    "zoomOut": "Zoom Out",
+    "zoomReset": "Reset",
+    "fowDebug": "FoW Debug",
+    "legend": "Legend",
+    "scenarioSelect": "Scenario Select",
+    "back": "Back",
+    "gameStart": "Start Game",
+    "selectScenario": "Select a scenario. Each scenario has different mission objectives and difficulty levels."
+  },
+  "tabs": {
+    "info": "Info",
+    "history": "History",
+    "logs": "Logs",
+    "opord": "OPORD",
+    "reports": "Reports"
+  },
+  "commands": {
+    "move": "Move",
+    "attack": "Attack",
+    "defend": "Defend",
+    "recon": "Recon",
+    "supply": "Supply",
+    "strike": "Strikes",
+    "clear": "Clear",
+    "submit": "Submit",
+    "parse": "Parse",
+    "advanceTurn": "Advance Turn",
+    "endGame": "End Game",
+    "orderInput": "Enter order (e.g., Unit A, move east)",
+    "parsedOrder": "Parsed Result",
+    "batchOrders": "Batch Orders"
+  },
+  "unitTypes": {
+    "INFANTRY": "Infantry",
+    "ARMOR": "Armor",
+    "ARTILLERY": "Artillery",
+    "AIR_DEFENSE": "Air Defense",
+    "RECON": "Recon",
+    "SUPPORT": "Support"
+  },
+  "terrain": {
+    "plain": "Plain",
+    "forest": "Forest",
+    "urban": "Urban",
+    "mountain": "Mountain",
+    "water": "Water"
+  },
+  "status": {
+    "intact": "Intact",
+    "lightDamage": "Light Damage",
+    "moderateDamage": "Moderate Damage",
+    "heavyDamage": "Heavy Damage",
+    "destroyed": "Destroyed",
+    "full": "Full",
+    "depleted": "Depleted",
+    "exhausted": "Exhausted"
+  },
+  "confidence": {
+    "confirmed": "Confirmed",
+    "estimated": "Estimated",
+    "suspected": "Suspected",
+    "unknown": "Unknown"
+  },
+  "report": {
+    "sitrep": "Situation Report",
+    "intsumm": "Intelligence Summary",
+    "opsum": "Operation Summary",
+    "logsitrep": "Logistics Report",
+    "salute": "Enemy Report",
+    "noReports": "No Reports",
+    "commanderOrder": "Commander's Order"
+  },
+  "gameMode": {
+    "classic": "Classic",
+    "arcade": "Arcade"
+  },
+  "victory": {
+    "majorVictory": "Major Victory",
+    "minorVictory": "Minor Victory",
+    "draw": "Draw",
+    "defeat": "Defeat"
+  },
+  "turn": "Turn",
+  "score": "Score",
+  "player": "Player",
+  "enemy": "Enemy",
+  "strikesRemaining": "Strikes Remaining"
+}

@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import API from '../lib/api';
+import { useI18n } from '../lib/i18n';
+import LanguageSwitcher from '../lib/language-switcher';
 
 interface Scenario {
   id: string;
@@ -29,6 +31,7 @@ const FALLBACK_SCENARIOS: Scenario[] = [
 
 export default function ScenariosPage() {
   const router = useRouter();
+  const { t, locale } = useI18n();
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
@@ -118,20 +121,21 @@ export default function ScenariosPage() {
       <header className="bg-gray-800/90 border-b border-gray-700/50 px-6 py-4 backdrop-blur-sm">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
-            作戦級CPX - シナリオ選択
+            {t('common.gameTitle')} - {t('common.scenarioSelect') || 'Scenario Select'}
           </h1>
-          <div className="flex gap-3">
+          <div className="flex gap-3 items-center">
+            <LanguageSwitcher />
             <button
               onClick={() => router.push('/games')}
               className="text-sm bg-gray-700/50 hover:bg-gray-600/50 px-4 py-2 rounded transition-colors"
             >
-              ゲーム一覧
+              {t('common.gameList')}
             </button>
             <button
               onClick={() => router.push('/')}
               className="text-sm bg-gray-700/50 hover:bg-gray-600/50 px-4 py-2 rounded transition-colors"
             >
-              Back
+              {t('common.back')}
             </button>
           </div>
         </div>
@@ -139,7 +143,7 @@ export default function ScenariosPage() {
 
       <main className="max-w-6xl mx-auto p-6">
         <p className="text-gray-400 mb-8 text-center">
-          シナリオを選択してください。各シナリオには異なる任務目標と難易度があります。
+          {t('common.selectScenario')}
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
