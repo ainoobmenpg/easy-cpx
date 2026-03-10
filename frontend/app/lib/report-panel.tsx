@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import API from './api';
+import { useI18n } from './i18n';
 import type { UnifiedReport } from '@shared/types';
 
 interface ReportPanelProps {
@@ -12,6 +13,7 @@ interface ReportPanelProps {
 type ReportTab = 'plan' | 'sync' | 'situation' | 'sustain';
 
 export default function ReportPanel({ gameId, turn }: ReportPanelProps) {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<ReportTab>('situation');
   const [report, setReport] = useState<UnifiedReport | null>(null);
   const [loading, setLoading] = useState(false);

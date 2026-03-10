@@ -125,7 +125,7 @@ function DebriefingContent() {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="bg-red-900/50 border border-red-500 p-6 rounded-lg text-center">
-          <p className="text-red-200 mb-4">{error || 'ミッション評価の読み込みに失敗しました'}</p>
+          <p className="text-red-200 mb-4">{error || t('debriefing.loadError')}</p>
           <button
             onClick={() => router.push('/scenarios')}
             className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded"

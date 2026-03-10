@@ -1122,7 +1122,7 @@ function GameContent() {
                   onClick={() => setOpordEditMode(!opordEditMode)}
                   className="text-xs px-2 py-1 bg-green-700/50 hover:bg-green-600/50 rounded text-green-300"
                 >
-                  {opordEditMode ? '閉じる' : '編集'}
+                  {opordEditMode ? t('actions.close') : t('game.displayToggle')}
                 </button>
               </div>
 
@@ -1132,7 +1132,7 @@ function GameContent() {
                 <div className="space-y-3 text-xs">
                   {/* Header */}
                   <div className="bg-gray-800/50 rounded p-2 border border-gray-700/30">
-                    <div className="font-bold text-green-300 text-sm">{opordData.title || '作戦計画'}</div>
+                    <div className="font-bold text-green-300 text-sm">{opordData.title || t('opord.title')}</div>
                     <div className="text-gray-400 text-[10px] mt-1">
                       区分: {opordData.classification || 'unclassified'} | 発効日: {opordData.effective_date || '-'}
                     </div>
@@ -1262,7 +1262,7 @@ function GameContent() {
                   )}
                 </div>
               ) : (
-                <p className="text-gray-500 text-xs">OPORDがありません。「編集」ボタンで作成してください。</p>
+                <p className="text-gray-500 text-xs">{t('game.noOpord')}</p>
               )}
             </div>
           )}
@@ -1401,41 +1401,41 @@ function GameContent() {
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div className="text-center p-1.5 bg-gray-800/50 rounded">
-                    <div className="text-gray-500 text-[10px]">弾薬</div>
+                    <div className="text-gray-500 text-[10px]">{t('opord.ammo')}</div>
                     <div className={selectedUnit.ammo === 'exhausted' ? 'text-red-400' : selectedUnit.ammo === 'depleted' ? 'text-yellow-400' : 'text-green-400'}>
-                      {selectedUnit.ammo === 'full' ? '充足' : selectedUnit.ammo === 'depleted' ? '低下' : '枯渇'}
+                      {selectedUnit.ammo === 'full' ? t('status.full') : selectedUnit.ammo === 'depleted' ? t('status.depleted') : t('status.exhausted')}
                     </div>
                   </div>
                   <div className="text-center p-1.5 bg-gray-800/50 rounded">
-                    <div className="text-gray-500 text-[10px]">燃料</div>
+                    <div className="text-gray-500 text-[10px]">{t('opord.fuel')}</div>
                     <div className={selectedUnit.fuel === 'exhausted' ? 'text-red-400' : selectedUnit.fuel === 'depleted' ? 'text-yellow-400' : 'text-green-400'}>
-                      {selectedUnit.fuel === 'full' ? '充足' : selectedUnit.fuel === 'depleted' ? '低下' : '枯渇'}
+                      {selectedUnit.fuel === 'full' ? t('status.full') : selectedUnit.fuel === 'depleted' ? t('status.depleted') : t('status.exhausted')}
                     </div>
                   </div>
                   <div className="text-center p-1.5 bg-gray-800/50 rounded">
-                    <div className="text-gray-500 text-[10px]">整備</div>
+                    <div className="text-gray-500 text-[10px]">{t('opord.maintenance')}</div>
                     <div className={selectedUnit.readiness === 'exhausted' ? 'text-red-400' : selectedUnit.readiness === 'depleted' ? 'text-yellow-400' : 'text-green-400'}>
-                      {selectedUnit.readiness === 'full' ? '充足' : selectedUnit.readiness === 'depleted' ? '低下' : '枯渇'}
+                      {selectedUnit.readiness === 'full' ? t('status.full') : selectedUnit.readiness === 'depleted' ? t('status.depleted') : t('status.exhausted')}
                     </div>
                   </div>
                 </div>
                 <div className="flex justify-between text-gray-400 pt-1 border-t border-gray-600/30">
-                  <span>位置</span>
+                  <span>{t('unitInfo.position')}</span>
                   <span className="text-gray-300">X:{selectedUnit.x.toFixed(1)} Y:{selectedUnit.y.toFixed(1)}</span>
                 </div>
               </div>
               {gameMode === 'arcade' ? (
                 // Arcade mode: 6 command buttons with batch support
                 <div className="space-y-2">
-                  <div className="text-xs text-purple-300 font-medium mb-1">コマンドを選択:</div>
+                  <div className="text-xs text-purple-300 font-medium mb-1">{t('game.commandSelect')}</div>
                   <div className="grid grid-cols-3 gap-1.5">
                     {[
-                      { cmd: 'move', label: '移動', icon: '>', color: 'bg-blue-600' },
-                      { cmd: 'attack', label: '攻撃', icon: 'X', color: 'bg-red-600' },
-                      { cmd: 'defend', label: '防御', icon: 'O', color: 'bg-green-600' },
-                      { cmd: 'recon', label: '偵察', icon: '?', color: 'bg-cyan-600' },
-                      { cmd: 'supply', label: '補給', icon: '+', color: 'bg-yellow-600' },
-                      { cmd: 'strike', label: '特攻', icon: '*', color: 'bg-purple-600' },
+                      { cmd: 'move', label: t('commands.move'), icon: '>', color: 'bg-blue-600' },
+                      { cmd: 'attack', label: t('commands.attack'), icon: 'X', color: 'bg-red-600' },
+                      { cmd: 'defend', label: t('commands.defend'), icon: 'O', color: 'bg-green-600' },
+                      { cmd: 'recon', label: t('commands.recon'), icon: '?', color: 'bg-cyan-600' },
+                      { cmd: 'supply', label: t('commands.supply'), icon: '+', color: 'bg-yellow-600' },
+                      { cmd: 'strike', label: t('commands.strike'), icon: '*', color: 'bg-purple-600' },
                     ].map((btn) => (
                       <button key={btn.cmd} onClick={() => addToBatch(btn.cmd)} disabled={loading || !selectedUnit}
                         className={`${btn.color} hover:opacity-90 disabled:opacity-50 rounded-lg p-2 text-xs font-bold transition-all flex flex-col items-center gap-0.5`}>
@@ -1448,8 +1448,8 @@ function GameContent() {
                   {pendingOrders.length > 0 && (
                     <div className="mt-2 bg-purple-900/30 rounded-lg p-2 text-xs space-y-1">
                       <div className="text-purple-300 font-medium flex justify-between items-center">
-                        <span>保留中の命令: {pendingOrders.length}</span>
-                        <button onClick={() => setPendingOrders([])} className="text-gray-400 hover:text-white text-[10px]">クリア</button>
+                        <span>{t('game.pendingOrders')}: {pendingOrders.length}</span>
+                        <button onClick={() => setPendingOrders([])} className="text-gray-400 hover:text-white text-[10px]">{t('commands.clear')}</button>
                       </div>
                       {pendingOrders.map((order, i) => {
                         const unit = gameState?.units?.find(u => u.id === order.unit_id);
@@ -1552,21 +1552,21 @@ function GameContent() {
             <span className="font-medium text-cyan-400">{gameState.phase}</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-gray-400">時間</span>
-            <span className={gameState.is_night ? 'text-indigo-400' : 'text-yellow-400'}>{gameState.is_night ? '夜' : '昼'} {gameState.time}</span>
+            <span className="text-gray-400">{t('game.time')}</span>
+            <span className={gameState.is_night ? 'text-indigo-400' : 'text-yellow-400'}>{gameState.is_night ? t('game.night') : t('game.day')} {gameState.time}</span>
           </div>
         </div>
         <div className="flex items-center gap-4 text-xs">
           <div className="flex items-center gap-2">
-            <span className="text-blue-400 font-medium">自軍</span>
-            <span className="text-green-400">{gameState.units.filter(u => u.side === 'player' && u.status !== 'destroyed').length}部隊</span>
+            <span className="text-blue-400 font-medium">{t('symbols.friend')}</span>
+            <span className="text-green-400">{gameState.units.filter(u => u.side === 'player' && u.status !== 'destroyed').length}{t('game.units')}</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-red-400 font-medium">敵軍</span>
-            <span className="text-gray-400">{gameState.units.filter(u => u.side === 'enemy' && u.status !== 'destroyed').length}部隊</span>
+            <span className="text-red-400 font-medium">{t('symbols.enemy')}</span>
+            <span className="text-gray-400">{gameState.units.filter(u => u.side === 'enemy' && u.status !== 'destroyed').length}{t('game.units')}</span>
           </div>
           <div className="flex items-center gap-2 px-2 py-1 bg-gray-700/50 rounded">
-            <span className="text-gray-400">ズーム</span>
+            <span className="text-gray-400">{t('game.zoom')}</span>
             <span className="font-medium">{Math.round(zoom * 100)}%</span>
           </div>
         </div>

@@ -360,6 +360,43 @@
     "placeholder": "メッセージを入力...",
     "send": "送信"
   },
+  "exconPanel": {
+    "title": "EXCON パネル (MEL/MIL)",
+    "activeEffects": "アクティブエフェクト",
+    "available": "利用可能",
+    "triggered": "トリガー済",
+    "expired": "期限切れ",
+    "cancelled": "キャンセル済",
+    "turn": "ターン",
+    "injectId": "インジェクトID",
+    "triggerType": "トリガータイプ",
+    "duration": "持続時間",
+    "durationTurns": "ターン",
+    "name": "名前",
+    "difficulty": "難易度",
+    "timing": "タイミング",
+    "evaluationPoints": "pt",
+    "description": "説明",
+    "availableInjects": "利用可能なインジェクト",
+    "triggeredInjects": "トリガーされたインジェクト"
+  },
+  "reportPanel": {
+    "opord": "作戦命令 - 指揮官の計画",
+    "opsum": "作戦概要",
+    "period": "期間",
+    "assessment": "評価",
+    "intsum": "情報概要",
+    "summary": "概要",
+    "logsit": "兵站状況報告",
+    "ammo": "弾薬",
+    "fuel": "燃料",
+    "full": "充足",
+    "depleted": "低下",
+    "exhausted": "枯渇",
+    "status": "状態",
+    "open": "開放",
+    "closed": "閉鎖"
+  },
   "statusLabel": {
     "destroyed": "壊滅"
   },

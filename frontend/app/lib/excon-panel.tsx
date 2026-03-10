@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import API from './api';
+import { useI18n } from './i18n';
 
 interface Inject {
   id: string;
@@ -51,6 +52,7 @@ interface ExconPanelProps {
 }
 
 export default function ExconPanel({ gameId, turn, isWhiteCell = true }: ExconPanelProps) {
+  const { t } = useI18n();
   const [injects, setInjects] = useState<Inject[]>([]);
   const [activeEffects, setActiveEffects] = useState<InjectLog[]>([]);
   const [injectHistory, setInjectHistory] = useState<InjectLog[]>([]);
@@ -185,13 +187,13 @@ export default function ExconPanel({ gameId, turn, isWhiteCell = true }: ExconPa
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'available':
-        return <span className="px-2 py-1 text-xs bg-green-900 text-green-300 rounded">Available</span>;
+        return <span className="px-2 py-1 text-xs bg-green-900 text-green-300 rounded">{t('exconPanel.available')}</span>;
       case 'triggered':
-        return <span className="px-2 py-1 text-xs bg-blue-900 text-blue-300 rounded">Triggered</span>;
+        return <span className="px-2 py-1 text-xs bg-blue-900 text-blue-300 rounded">{t('exconPanel.triggered')}</span>;
       case 'expired':
-        return <span className="px-2 py-1 text-xs bg-gray-700 text-gray-400 rounded">Expired</span>;
+        return <span className="px-2 py-1 text-xs bg-gray-700 text-gray-400 rounded">{t('exconPanel.expired')}</span>;
       case 'cancelled':
-        return <span className="px-2 py-1 text-xs bg-red-900 text-red-300 rounded">Cancelled</span>;
+        return <span className="px-2 py-1 text-xs bg-red-900 text-red-300 rounded">{t('exconPanel.cancelled')}</span>;
       default:
         return <span className="px-2 py-1 text-xs bg-gray-700 text-gray-400 rounded">{status}</span>;
     }
@@ -204,9 +206,9 @@ export default function ExconPanel({ gameId, turn, isWhiteCell = true }: ExconPa
     <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 w-full">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-bold text-white flex items-center gap-2">
-          <span>🎯</span> EXCON Panel (MEL/MIL)
+          <span>🎯</span> {t('exconPanel.title')}
         </h2>
-        <span className="text-sm text-gray-400">Turn {turn}</span>
+        <span className="text-sm text-gray-400">{t('exconPanel.turn')} {turn}</span>
       </div>
 
       {error && (
@@ -218,7 +220,7 @@ export default function ExconPanel({ gameId, turn, isWhiteCell = true }: ExconPa
       {/* Active Effects */}
       {activeEffects.length > 0 && (
         <div className="mb-4">
-          <h3 className="text-sm font-semibold text-yellow-400 mb-2">Active Effects</h3>
+          <h3 className="text-sm font-semibold text-yellow-400 mb-2">{t('exconPanel.activeEffects')}</h3>
           <div className="space-y-2">
             {activeEffects.map((log, idx) => (
               <div key={idx} className="p-2 bg-blue-900/30 border border-blue-700 rounded">
@@ -244,7 +246,7 @@ export default function ExconPanel({ gameId, turn, isWhiteCell = true }: ExconPa
       {/* Available Injects */}
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-green-400 mb-2">
-          Available Injects ({availableInjects.length})
+          {t('exconPanel.availableInjects')} ({availableInjects.length})
         </h3>
         <div className="space-y-2 max-h-48 overflow-y-auto">
           {availableInjects.map(inject => (
@@ -318,7 +320,7 @@ export default function ExconPanel({ gameId, turn, isWhiteCell = true }: ExconPa
       {triggeredInjects.length > 0 && (
         <div className="mb-4">
           <h3 className="text-sm font-semibold text-blue-400 mb-2">
-            Triggered ({triggeredInjects.length})
+            {t('exconPanel.triggeredInjects')} ({triggeredInjects.length})
           </h3>
           <div className="space-y-2">
             {triggeredInjects.map(inject => (
